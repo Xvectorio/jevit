@@ -1,0 +1,58 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>JevIt recipes</title>
+<link rel="icon" href="icon.svg">
+<link rel="stylesheet" href="style.css">
+<body>
+  <h1><img src="icon.svg" alt="" width="28" height="28"> JevIt: AI mail triage</h1>
+  <fieldset class="consent">
+    <legend>Data sent to TypeSafe</legend>
+    <p>To classify an email, JevIt sends its <b>sender, recipients, subject and text</b> (up to 6000 characters), your address,
+      and your recipes with their learned examples to <b>TypeSafe (api.typesafe.ai)</b>, using your own API key.
+      This only happens for mail you triage: new mail if you turn on automatic triage, or mail you pick.
+      Nothing is sent to the JevIt author. JevIt is not affiliated with TypeSafe.</p>
+    <label><input type="checkbox" id="consent"> JevIt may send the content of emails I triage to TypeSafe</label>
+    <span class="hint">Nothing is sent until you tick this. Untick at any time to stop all requests.</span>
+  </fieldset>
+  <label>TypeSafe API key <input type="password" id="apiKey" autocomplete="off">
+    <span class="hint" id="keyHint"></span></label>
+  <label>Model <input type="text" id="model"> <span class="hint">jev-latest, or pin a version (e.g. jev-1.13.0) once thresholds are tuned</span></label>
+  <label><input type="checkbox" id="autoTriage"> Automatically run recipes on new mail</label>
+
+  <h2>Recipes</h2>
+  <p class="hint">Each recipe is one yes/no question to Jev. Refer to the mail as <code>`email`</code> and to yourself as <code>`me`</code>.
+    Write the exact condition; Jev reads it literally. A recipe matches when the yes-probability reaches its threshold.
+    A match always adds the recipe's tag; the action can do one more thing.</p>
+  <div id="recipes"></div>
+  <select id="library" aria-label="Add recipe"></select>
+  <p><button id="save">Save</button> <span id="status"></span></p>
+  <p>
+    <button id="export">Export recipes…</button>
+    <button id="import">Import recipes…</button>
+    <input type="file" id="importFile" accept=".json,application/json" hidden>
+    <span class="hint">Backup file with recipes and learned examples. The API key is not included.</span>
+  </p>
+
+  <template id="recipe">
+    <fieldset>
+      <div class="row">
+        <label>Name <input type="text" name="name" required></label>
+        <label>Tag key <input type="text" name="key" pattern="[a-z0-9_]+" required></label>
+        <label>Color <input type="color" name="color"></label>
+        <label>Threshold <input type="number" name="threshold" min="0" max="1" step="0.05"></label>
+      </div>
+      <label>Question <textarea name="question"></textarea></label>
+      <label>Counts as yes <textarea name="yes"></textarea></label>
+      <label>Counts as no <textarea name="no"></textarea></label>
+      <div class="row">
+        <label>When it matches <select name="action"></select></label>
+        <label class="folder">Folder <select name="folder"></select></label>
+      </div>
+      <details class="examples"><summary class="hint"></summary><ul></ul></details>
+      <button type="button" class="clear">Forget examples</button>
+      <button type="button" class="remove">Remove recipe</button>
+    </fieldset>
+  </template>
+  <script src="jev.js"></script>
+  <script src="options.js"></script>
+</body>

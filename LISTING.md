@@ -1,0 +1,71 @@
+# JevIt: ATN listing texts
+
+Paste these into the fields at https://addons.thunderbird.net/developers/ when submitting `jevit.xpi`.
+
+## Name
+JevIt: AI mail triage
+
+## Summary (≤ 250 characters)
+Triage your mail with TypeSafe's Jev model: recipes tag, star, mark read, junk or move mail. Tune them, teach Jev from your corrections, and back them up. Uses your own TypeSafe API key. Unofficial; not affiliated with TypeSafe.
+
+## Description
+JevIt sorts your mail with **recipes**. A recipe is one plain-language yes/no question, such as "Is this an invoice or receipt?", which TypeSafe's Jev model answers for each email with a probability. When the probability reaches the recipe's threshold, JevIt tags the email and can also star it, mark it read, mark it as junk, or move it to a folder.
+
+**Features**
+- Ready-made recipes: Spam, Needs reply, Newsletter, Invoice / receipt, Urgent, Meeting / event, Shipping, Security alert, Personal, Social, Jobs / recruiting.
+- Write your own recipes, or create one from selected mail ("more like this").
+- Teach Jev: right-click mail → JevIt → "This is …" / "This is not …". The mail becomes an example the recipe learns from. Shortcuts: Alt+Shift+S (spam) and Alt+Shift+D (not spam).
+- Review Jev's scores for the open email in the header popup, then correct and apply them.
+- Triage selected mail from the context menu, or turn on automatic triage for new mail.
+- Export and import recipes as a JSON backup.
+
+**Requirements**
+- A TypeSafe API key (https://typesafe.ai). Usage is billed to your TypeSafe account by TypeSafe.
+- Thunderbird 128 or newer.
+
+**Privacy.** Nothing is sent until you explicitly allow it in the JevIt manager. Mail content goes only to TypeSafe, never to the JevIt author. See the privacy policy for details.
+
+JevIt is an independent project and is not affiliated with or endorsed by TypeSafe. "Jev" is TypeSafe's model name.
+
+## Categories
+Tags; Filters
+
+## Support
+Email: jevit@xvector.io
+
+## License
+Mozilla Public License 2.0 (MPL-2.0)
+
+## Privacy policy
+**JevIt privacy policy**
+
+JevIt is a Thunderbird add-on that classifies email with TypeSafe's Jev model. This policy describes what data the add-on handles.
+
+**What is sent, and to whom.** Only after you tick "JevIt may send the content of emails I triage to TypeSafe" in the JevIt manager, JevIt sends the following to TypeSafe (https://api.typesafe.ai) over an encrypted HTTPS connection, for each email you triage:
+- the email's sender, recipients (To and CC), subject, and text body. Quoted replies are removed, and the body is limited to 6000 characters.
+- the email address of your account's default identity, so recipes can tell whether mail is addressed to you.
+- your recipes: their questions and descriptions, and their learned examples (sender, subject and the first 300 characters of example emails you marked).
+
+Triage happens only for new mail if you turned on automatic triage, or for mail you select or open and triage yourself. The request is authenticated with your own TypeSafe API key. TypeSafe processes this data under its own terms and privacy policy (https://docs.typesafe.ai/legal). According to TypeSafe, requests are not used to train its models.
+
+**What stays on your computer.** Your API key, your recipes and learned examples, and your settings are stored only in Thunderbird's local extension storage. Exported backups are files you save yourself. They contain recipes and examples, but not your API key.
+
+**What the author receives.** Nothing. JevIt has no analytics, telemetry, tracking or server of its own, and it sends no data to the author or to anyone other than TypeSafe.
+
+**Your control.** Untick the consent box to stop all requests immediately. Remove recipes or examples in the manager, or uninstall JevIt to delete all its stored data. Tags JevIt added to your mail remain until you remove them.
+
+**Contact.** jevit@xvector.io
+
+## Notes to reviewer
+- There's no build step. The package is the readable source, and nothing is minified or loaded remotely.
+- To test triage you need a TypeSafe API key. <!-- Put a test key here, or say how the reviewer can get one; this field is private to reviewers. -->
+- Test steps:
+  1. After install, the manager opens. Tick the consent box, paste the key and click Save.
+  2. Open an email and click the JevIt button in the message header to see Jev's scores.
+  3. Or right-click mail → JevIt → Triage with Jev.
+- The `sensitiveDataUpload` permission is declared because email content is sent to TypeSafe for classification, which is the add-on's core function. It needs opt-in consent first.
+
+## Screenshots to add
+1. The recipe manager, including the consent box.
+2. The message-header popup with Jev's scores.
+3. The right-click menu: JevIt → recipe → "This is …".

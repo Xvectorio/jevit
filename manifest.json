@@ -1,0 +1,63 @@
+{
+  "manifest_version": 2,
+  "name": "JevIt: AI mail triage",
+  "description": "Triage mail with TypeSafe Jev recipes: tag, star, mark read, junk or move. Unofficial; not affiliated with TypeSafe.",
+  "version": "1.0.0",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "jevit@xvector.io",
+      "strict_min_version": "128.0"
+    }
+  },
+  "permissions": [
+    "messagesRead",
+    "messagesUpdate",
+    "messagesMove",
+    "messagesTags",
+    "messagesTagsList",
+    "accountsRead",
+    "storage",
+    "menus",
+    "notifications",
+    "sensitiveDataUpload",
+    "https://api.typesafe.ai/*"
+  ],
+  "background": {
+    "scripts": [
+      "jev.js",
+      "background.js"
+    ]
+  },
+  "message_display_action": {
+    "default_title": "JevIt",
+    "default_popup": "popup.html",
+    "default_icon": "icon.svg"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "icons": {
+    "32": "icon.svg",
+    "64": "icon.svg"
+  },
+  "browser_action": {
+    "default_title": "JevIt recipes",
+    "default_icon": "icon.svg"
+  },
+  "commands": {
+    "teach-spam": {
+      "suggested_key": {
+        "default": "Alt+Shift+S"
+      },
+      "description": "This is Spam (teach Jev and tag)"
+    },
+    "teach-not-spam": {
+      "suggested_key": {
+        "default": "Alt+Shift+D"
+      },
+      "description": "This is not Spam (teach Jev and untag)"
+    }
+  },
+  "author": "xvector.io"
+}

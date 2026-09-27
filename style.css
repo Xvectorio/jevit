@@ -1,0 +1,18 @@
+:root { color-scheme: light dark; font: 14px system-ui, sans-serif; }
+body { margin: 12px; max-width: 760px; }
+label { display: block; margin: 6px 0; }
+input[type="text"], input[type="password"], textarea { width: 100%; box-sizing: border-box; }
+textarea { min-height: 3em; }
+fieldset { margin: 12px 0; border-radius: 6px; }
+.row { display: grid; grid-template-columns: 1fr 1fr 60px 90px; gap: 8px; align-items: end; }
+table { width: 100%; border-collapse: collapse; }
+td { padding: 4px 6px; white-space: nowrap; }
+meter { width: 120px; }
+.hint { opacity: 0.7; font-size: 12px; }
+#status { min-height: 1.2em; }
+.examples ul { margin: 4px 0; padding-left: 18px; }
+.examples li { margin: 2px 0; white-space: normal; }
+.examples li button { padding: 0 6px; margin-left: 4px; }
+.consent { border-color: #d88a00; }
+.consent p { margin: 4px 0 8px; }
+#keyHint { color: #c33; opacity: 1; }
