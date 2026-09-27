@@ -74,6 +74,8 @@ const DEFAULTS = {
   model: "jev-latest",
   autoTriage: false,
   triagedColor: "#2A9D8F",
+  budget: 1, // USD per calendar month; 0 = no limit
+  pricePerMtok: 0.042, // USD per million input tokens (jev-1.13; output tokens are free)
   recipes: RECIPE_LIBRARY.slice(0, 5),
 };
 
@@ -196,11 +198,33 @@ async function askJev({ apiKey, model }, state, questions) {
       continue;
     }
     if (!r.ok) throw new Error(`Jev ${r.status}: ${await r.text()}`);
-    return (await r.json()).answers;
+    return r.json(); // { model, answers, usage: { input_tokens, output_tokens } }
   }
 }
 
+// --- Usage and budget (estimated from the token counts Jev returns) ---
+
+const monthOf = (date = new Date()) => date.toISOString().slice(0, 7); // "2026-09"
+const money = (usd) => `$${usd > 0 && usd < 0.01 ? usd.toFixed(5) : usd.toFixed(2)}`;
+const emptyUsage = () => ({ requests: 0, inputTokens: 0, cost: 0 });
+
+// Counters after one more request: this month's (restarting when the month changes) and all-time.
+function addUsage(usage, month, inputTokens, pricePerMtok) {
+  const cost = (inputTokens * pricePerMtok) / 1e6;
+  const add = (u) => ({ requests: u.requests + 1, inputTokens: u.inputTokens + inputTokens, cost: u.cost + cost });
+  const current = usage?.month === month ? usage : emptyUsage();
+  return { month, ...add(current), total: add(usage?.total ?? emptyUsage()) };
+}
+
+// Dollars left in this month's budget; Infinity without a budget.
+function budgetLeft(settings, usage, month) {
+  if (!(settings.budget > 0)) return Infinity;
+  return settings.budget - (usage?.month === month ? usage.cost : 0);
+}
+
 // --- Thunderbird side ---
+
+const loadUsage = async () => (await messenger.storage.local.get({ usage: null })).usage;
 
 const loadSettings = () => messenger.storage.local.get(DEFAULTS);
 
@@ -223,12 +247,22 @@ async function emailState(id) {
 
 async function classify(id, settings) {
   if (!settings.consent) throw new Error("Allow sending mail to TypeSafe first (JevIt manager, top of the page).");
+  const month = monthOf();
+  if (budgetLeft(settings, await loadUsage(), month) <= 0) {
+    throw new Error(`Monthly Jev budget of ${money(settings.budget)} reached. Raise it in the JevIt manager, or wait for next month.`);
+  }
   const state = await emailState(id);
-  const [answers, known] = await Promise.all([
+  const [response, known] = await Promise.all([
     askJev(settings, state, questionsFor(settings.recipes)),
-    settings.recipes.some((r) => r.skipKnown) ? knownSender(state.email.from) : false,
+    // A failing lookup must not fail the triage: the Jev request is already paid for. Treat as unknown.
+    settings.recipes.some((r) => r.skipKnown)
+      ? knownSender(state.email.from).catch((e) => (console.warn("JevIt: known-sender check failed", e), false))
+      : false,
   ]);
-  return { state, answers, known, keys: decide(settings.recipes, answers, known) };
+  // ponytail: read-modify-write; a popup and a background batch finishing at the same moment can drop one count
+  const usage = addUsage(await loadUsage(), month, response.usage?.input_tokens ?? 0, settings.pricePerMtok);
+  await messenger.storage.local.set({ usage });
+  return { state, answers: response.answers, known, keys: decide(settings.recipes, response.answers, known) };
 }
 
 // Is the sender someone you know: in a local address book (including Collected Addresses), or a recipient
@@ -240,7 +274,7 @@ async function knownSender(author) {
   if (!email.includes("@")) return false;
   const own = (await messenger.identities.list()).map((i) => i.email.toLowerCase());
   if (own.includes(email)) return false;
-  const contacts = await messenger.contacts.query({ searchString: email, includeRemote: false });
+  const contacts = await messenger.contacts.quickSearch({ searchString: email, includeRemote: false }); // MV2 API
   if (contacts.some((c) => emailsIn(c).includes(email))) return true;
   const sent = (await messenger.folders.query({ specialUse: ["sent"] })).map((f) => f.id);
   if (!sent.length) return false;
@@ -287,5 +321,5 @@ async function* iterate(list) {
 }
 
 if (typeof module !== "undefined") {
-  module.exports = { DEFAULTS, RECIPE_LIBRARY, cleanBody, questionFor, questionsFor, decide, plan, addExample, draftRecipe, parseBackup, askJev, resolveFolder, applyRecipes, knownSender };
+  module.exports = { DEFAULTS, RECIPE_LIBRARY, cleanBody, questionFor, questionsFor, decide, plan, addExample, draftRecipe, parseBackup, askJev, resolveFolder, applyRecipes, knownSender, addUsage, budgetLeft, money };
 }

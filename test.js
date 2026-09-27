@@ -1,6 +1,6 @@
 // node test.js  (set TYPESAFE_API_KEY to also run the default recipes against Jev)
 const assert = require("node:assert");
-const { DEFAULTS, RECIPE_LIBRARY, cleanBody, questionFor, questionsFor, decide, plan, addExample, draftRecipe, parseBackup, askJev, resolveFolder, applyRecipes, knownSender } = require("./jev.js");
+const { DEFAULTS, RECIPE_LIBRARY, cleanBody, questionFor, questionsFor, decide, plan, addExample, draftRecipe, parseBackup, askJev, resolveFolder, applyRecipes, knownSender, addUsage, budgetLeft, money } = require("./jev.js");
 
 assert.equal(cleanBody("Hi\n> old quote\n\n\n\n  Bye  "), "Hi\n\nBye");
 assert.equal(cleanBody("x".repeat(9000)).length, 6000);
@@ -21,6 +21,19 @@ assert.equal(q.instructions.examples_yes[0].label, undefined);
 
 const rs = DEFAULTS.recipes;
 assert.deepEqual(decide(rs, { jev_spam: { noul: 0.8 }, jev_reply: { noul: 0.59 }, jev_urgent: { noul: 0.9 } }), ["jev_spam", "jev_urgent"]);
+// Usage: this month's counters restart with a new month; all-time keeps adding. Budget 0 = no limit.
+let u = addUsage(null, "2026-09", 2000, 0.042);
+u = addUsage(u, "2026-09", 3000, 0.042);
+assert.deepEqual([u.requests, u.inputTokens, u.total.requests], [2, 5000, 2]);
+assert.ok(Math.abs(u.cost - 0.00021) < 1e-12);
+u = addUsage(u, "2026-10", 1000, 0.042);
+assert.deepEqual([u.month, u.requests, u.inputTokens, u.total.requests, u.total.inputTokens], ["2026-10", 1, 1000, 3, 6000]);
+assert.ok(Math.abs(budgetLeft({ budget: 1 }, u, "2026-10") - (1 - 0.000042)) < 1e-12);
+assert.equal(budgetLeft({ budget: 1 }, u, "2026-11"), 1, "a new month starts with the full budget");
+assert.equal(budgetLeft({ budget: 0 }, u, "2026-10"), Infinity);
+assert.equal(budgetLeft({ budget: 0.0001 }, addUsage(u, "2026-10", 5000, 0.042), "2026-10") <= 0, true);
+assert.deepEqual([money(0.00021), money(1.5), money(0)], ["$0.00021", "$1.50", "$0.00"]);
+
 // Known sender: Spam (skipKnown by default) can't match, other recipes still can.
 assert.deepEqual(decide(rs, { jev_spam: { noul: 0.99 }, jev_urgent: { noul: 0.9 } }, true), ["jev_urgent"]);
 
@@ -98,7 +111,7 @@ global.messenger = { folders: {
   // Known senders: exact address in a contact, or a recipient in Sent; never your own address.
   global.messenger = {
     identities: { list: async () => [{ email: "Me@Example.com" }] },
-    contacts: { query: async ({ searchString }) => [
+    contacts: { quickSearch: async ({ searchString }) => [
       { properties: { PrimaryEmail: "friend@x.org", vCard: "BEGIN:VCARD\nEMAIL;PREF=1:Pal@X.org\nEND:VCARD" } },
       { properties: { PrimaryEmail: "aa@b.com" } }, // quick search matches loosely; must not count for a@b.com
     ].filter((c) => JSON.stringify(c).toLowerCase().includes(searchString)) },
@@ -123,7 +136,8 @@ if (process.env.TYPESAFE_API_KEY) {
       body: "We detected unusual activity. Verify your password within 24 hours at http://paypa1-verify.com or lose access.",
     },
   };
-  askJev({ apiKey: process.env.TYPESAFE_API_KEY, model: "jev-latest" }, state, questionsFor(RECIPE_LIBRARY)).then((a) => {
+  askJev({ apiKey: process.env.TYPESAFE_API_KEY, model: "jev-latest" }, state, questionsFor(RECIPE_LIBRARY)).then(({ answers: a, usage }) => {
+    console.log("usage", usage);
     for (const r of RECIPE_LIBRARY) console.log(r.name.padEnd(18), a[r.key].noul.toFixed(2));
     assert.ok(decide(RECIPE_LIBRARY, a).includes("jev_spam"), "phishing mail should match spam");
     assert.ok(!decide(RECIPE_LIBRARY, a).includes("jev_newsletter"));

@@ -17,6 +17,8 @@ function read() {
   s.model = $("#model").value.trim() || DEFAULTS.model;
   s.autoTriage = $("#autoTriage").checked;
   s.triagedColor = $("#triagedColor").value;
+  s.budget = Number($("#budget").value);
+  s.pricePerMtok = Number($("#pricePerMtok").value);
   document.querySelectorAll("#recipes fieldset").forEach((fs, i) => {
     for (const f of FIELDS) s.recipes[i][f] = fs.elements[f].value.trim();
     s.recipes[i].threshold = Number(fs.elements.threshold.value);
@@ -31,6 +33,9 @@ function render() {
   $("#model").value = s.model;
   $("#autoTriage").checked = s.autoTriage;
   $("#triagedColor").value = s.triagedColor;
+  $("#budget").value = s.budget;
+  $("#pricePerMtok").value = s.pricePerMtok;
+  showUsage();
   $("#recipes").replaceChildren(
     ...s.recipes.map((r, i) => {
       const card = $("#recipe").content.firstElementChild.cloneNode(true);
@@ -147,6 +152,25 @@ $("#consent").onchange = async (e) => {
   if (e.target.checked && !$("#apiKey").value.trim()) $("#apiKey").focus();
 };
 
+// This month's and all-time usage, against the budget currently in the form.
+async function showUsage() {
+  const usage = await loadUsage();
+  const month = monthOf();
+  const current = usage?.month === month ? usage : emptyUsage();
+  const budget = Number($("#budget").value);
+  const line = (u) => `${u.requests.toLocaleString()} request(s) · ${u.inputTokens.toLocaleString()} tokens · ${money(u.cost)}`;
+  $("#usageMonthName").textContent = new Date().toLocaleString(undefined, { month: "long", year: "numeric" });
+  $("#usageMonth").textContent = line(current) + (budget > 0 ? ` of ${money(budget)}` : " (no budget limit)");
+  $("#usageTotal").textContent = line(usage?.total ?? emptyUsage());
+  $("#budgetMeter").hidden = !(budget > 0);
+  $("#budgetMeter").value = budget > 0 ? Math.min(current.cost / budget, 1) : 0;
+}
+$("#budget").oninput = showUsage;
+$("#resetUsage").onclick = async () => {
+  await messenger.storage.local.remove("usage");
+  $("#status").textContent = "Usage counters reset.";
+};
+
 const blankRecipe = () =>
   ({ ...structuredClone(RECIPE_LIBRARY[0]), key: `jev_${Date.now()}`, name: "New recipe", color: "#808080", question: "Is `email` …?", yes: "", no: "" });
 
@@ -214,6 +238,10 @@ const validFolder = (folder) =>
 
 async function save() {
   read();
+  if (!(s.budget >= 0) || !(s.pricePerMtok >= 0)) {
+    $("#status").textContent = "Fix the budget and price: they must be numbers, 0 or more.";
+    return;
+  }
   const keys = s.recipes.map((r) => r.key);
   const bad = s.recipes.find((r) =>
     !/^[a-z0-9_]+$/.test(r.key) || !r.question || !(r.threshold >= 0 && r.threshold <= 1) || (movesMail(r.action) && !validFolder(r.folder)));
@@ -254,6 +282,7 @@ async function loadFolders() {
   await takeDraft();
   messenger.storage.onChanged.addListener((changes) => {
     if (changes.draft?.newValue) takeDraft();
+    if (changes.usage) showUsage();
     // Examples taught from the popup or context menu while this page is open; keep them so Save doesn't drop them.
     if (changes.recipes?.newValue) {
       read();
