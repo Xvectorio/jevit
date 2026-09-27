@@ -17,7 +17,7 @@ async function triageList(list, manual) {
     : "";
   if (missing) return notify(`Can't triage with Jev: ${missing}. Click here to open the JevIt manager.`, manual);
   await syncTags(s);
-  let failed = 0, skipped = 0, firstError;
+  let failed = 0, skipped = 0, firstError, halted;
   running++;
   try {
     // ponytail: one message at a time; parallelize if big batches feel slow (limit: 1200 req/min)
@@ -31,6 +31,10 @@ async function triageList(list, manual) {
         const { keys, answers } = await classify(m.id, s);
         await applyRecipes(m.id, s.recipes, keys, answers, true);
       } catch (e) {
+        if (e.cause === "halt") {
+          halted = e;
+          break;
+        }
         failed++;
         firstError ??= e;
         console.error("JevIt:", m.subject, e);
@@ -43,6 +47,7 @@ async function triageList(list, manual) {
     showBudgetBadge().catch(console.error);
   }
   if (manual && skipped) notify(`Skipped ${skipped} mail(s) that were already triaged. To judge them again, untick “Skip already triaged mail” in the JevIt manager.`, true);
+  if (halted) notify(`Jev triage stopped: ${halted.message}`, manual, halted.message);
   if (failed) notify(`Jev triage failed for ${failed} mail(s): ${firstError.message}`, manual, firstError.message.split(":")[0]);
 }
 

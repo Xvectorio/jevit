@@ -284,10 +284,13 @@ async function emailState(id) {
 }
 
 async function classify(id, settings) {
-  if (!settings.consent) throw new Error("Allow sending mail to TypeSafe first (JevIt manager, top of the page).");
+  // Consent and budget are read fresh, so changing them in the manager takes effect mid-batch.
+  // Their errors have cause "halt": the rest of a batch would fail the same way.
+  const { consent, budget } = await messenger.storage.local.get({ consent: DEFAULTS.consent, budget: DEFAULTS.budget });
+  if (!consent) throw new Error("Allow sending mail to TypeSafe first (JevIt manager, top of the page).", { cause: "halt" });
   const month = monthOf();
-  if (budgetLeft(settings, await loadUsage(), month) <= 0) {
-    throw new Error(`Monthly Jev budget of ${money(settings.budget)} reached. Raise it in the JevIt manager, or wait for next month.`);
+  if (budgetLeft({ budget }, await loadUsage(), month) <= 0) {
+    throw new Error(`Monthly Jev budget of ${money(budget)} reached. Raise it in the JevIt manager, or wait for next month.`, { cause: "halt" });
   }
   const state = await emailState(id);
   const [response, known] = await Promise.all([
