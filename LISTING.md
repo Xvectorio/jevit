@@ -19,6 +19,7 @@ JevIt sorts your mail with **recipes**. A recipe is one plain-language yes/no qu
 - Triage selected mail from the context menu, or turn on automatic triage for new mail. Already triaged mail is skipped by default. The toolbar button counts the mails done, and a click stops a long run.
 - A Triaged tag on every mail Jev has judged, and tag colours for both light and dark themes.
 - Move matches to one folder, or to a folder of the same name in each account (such as each account's own Junk).
+- Exclude accounts: mail in an excluded account is never sent to Jev.
 - Export and import recipes as a JSON backup.
 - Usage and budget: see requests, tokens and estimated cost per month, and set a monthly spending limit (default $1).
 - Spam protection for people you know: mail from your contacts, or from people you've sent mail to, is never tagged as Spam (a per-recipe option). It's checked locally.
@@ -51,7 +52,7 @@ JevIt is a Thunderbird add-on that classifies email with TypeSafe's Jev model. T
 - the email address of your account's default identity, so recipes can tell whether mail is addressed to you.
 - your recipes: their questions and descriptions, and their learned examples (sender, subject and the first 300 characters of example emails you marked).
 
-Triage happens only for new mail if you turned on automatic triage, or for mail you select or open and triage yourself. The request is authenticated with your own TypeSafe API key. TypeSafe processes this data under its own terms and privacy policy (https://docs.typesafe.ai/legal). According to TypeSafe, requests are not used to train its models.
+Triage happens only for new mail if you turned on automatic triage, or for mail you select or open and triage yourself. Mail in accounts you exclude in the manager is never sent. The request is authenticated with your own TypeSafe API key. TypeSafe processes this data under its own terms and privacy policy (https://docs.typesafe.ai/legal). According to TypeSafe, requests are not used to train its models.
 
 **Known senders.** For recipes set to "Never match mail from people I know" (Spam by default), JevIt checks locally whether the sender is in one of your local address books, or is a recipient of mail in your Sent folders. It needs Thunderbird's address book permission for this. The lookup happens inside Thunderbird, and your contacts and sent mail are never sent to TypeSafe or anyone else.
 
