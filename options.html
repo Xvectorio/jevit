@@ -20,23 +20,24 @@
           and your recipes with their learned examples to <b>TypeSafe (api.typesafe.ai)</b>, using your own API key.
           This only happens for mail you triage: new mail if automatic triage is on, or mail you pick.
           Nothing is sent to the JevIt author. JevIt is not affiliated with TypeSafe.</p>
-        <label class="check"><input type="checkbox" id="consent"> JevIt may send the content of emails I triage to TypeSafe</label>
+        <label class="check" title="Required before JevIt sends anything to TypeSafe. Untick to stop all requests at once."><input type="checkbox" id="consent"> JevIt may send the content of emails I triage to TypeSafe</label>
         <p class="hint">Nothing is sent until you tick this. Untick at any time to stop all requests.</p>
       </div>
       <div class="grid2">
-        <label>TypeSafe API key
+        <label title="Your own key from typesafe.ai. Saved when you leave the field, and never included in backups.">TypeSafe API key
           <input type="password" id="apiKey" autocomplete="off" spellcheck="false">
           <span class="hint warn" id="keyHint"></span>
         </label>
-        <label>Model
+        <label title="Which Jev version answers. jev-latest follows new releases; a pinned version keeps results stable.">Model
           <input type="text" id="model" spellcheck="false">
           <span class="hint">jev-latest, or pin a version (e.g. jev-1.13.0) once thresholds are tuned</span>
         </label>
       </div>
-      <label class="check"><input type="checkbox" id="autoTriage"> Automatically run recipes on new mail</label>
-      <label class="check" id="spamKnownRow"><input type="checkbox" id="spamKnown"> Never tag mail from people I know as Spam (senders in my address books, or people I've sent mail to)</label>
+      <label class="check" title="Triage every new email in your inboxes and normal folders as it arrives. Mail that Thunderbird moves to Junk is not seen."><input type="checkbox" id="autoTriage"> Automatically run recipes on new mail</label>
+      <label class="check" title="When you triage selected mail, emails that already have the Triaged tag are skipped, so you don't pay for them twice. Untick to judge them again, for example after changing a recipe. The header popup always asks Jev."><input type="checkbox" id="skipTriaged"> Skip already triaged mail</label>
+      <label class="check" id="spamKnownRow" title="Mail from people in your local address books, or people you've sent mail to, never gets the Spam tag. Checked inside Thunderbird; your contacts are never sent anywhere."><input type="checkbox" id="spamKnown"> Never tag mail from people I know as Spam (senders in my address books, or people I've sent mail to)</label>
       <div class="grid2">
-        <label>Tag colours
+        <label title="Which colour set JevIt's tags use: for a dark or a light Thunderbird theme.">Tag colours
           <select id="colorScheme">
             <option value="auto">Follow Thunderbird's theme</option>
             <option value="light">Light theme colours</option>
@@ -44,7 +45,7 @@
           </select>
           <span class="hint">Thunderbird has one colour per tag, so JevIt recolours its tags when this or the theme changes.</span>
         </label>
-        <label>“Triaged” tag colour (dark · light theme)
+        <label title="The Triaged tag marks every email Jev has judged, whether or not a recipe matched.">“Triaged” tag colour (dark · light theme)
           <span class="pair"><input type="color" id="triagedColor" title="Dark theme"><input type="color" id="triagedColorLight" title="Light theme"></span>
           <span class="hint">Added to every email Jev has judged.</span>
         </label>
@@ -59,11 +60,11 @@
         <div><span class="hint">All time</span> <span id="usageTotal"></span></div>
       </div>
       <div class="grid2">
-        <label>Monthly budget (USD)
+        <label title="Estimated spend per calendar month. When it's used up, JevIt stops asking Jev and notifies you.">Monthly budget (USD)
           <input type="number" id="budget" min="0" step="0.5">
           <span class="hint">0 = no limit. When it's reached, JevIt stops asking Jev until next month.</span>
         </label>
-        <label>Price per million input tokens (USD)
+        <label title="Used to estimate cost from the token counts Jev reports. Change it if TypeSafe's price changes.">Price per million input tokens (USD)
           <input type="number" id="pricePerMtok" min="0" step="0.001">
           <span class="hint">Jev 1.13: $0.042; output tokens are free. Check typesafe.ai for current prices.</span>
         </label>
@@ -71,7 +72,7 @@
       <div class="toolbar">
         <span class="hint">Estimated from the token counts Jev returns. Your TypeSafe bill is what counts.</span>
         <span class="spacer"></span>
-        <button id="resetUsage">Reset counters</button>
+        <button id="resetUsage" title="Set this month's and all-time counters to zero. Doesn't change your TypeSafe bill.">Reset counters</button>
       </div>
     </section>
 
@@ -82,11 +83,11 @@
         A match always adds the recipe's tag; the action can do one more thing.</p>
       <div id="recipes"></div>
       <div class="toolbar">
-        <select id="library" aria-label="Add recipe"></select>
+        <select id="library" aria-label="Add recipe" title="Add a blank recipe or a ready-made one."></select>
         <button id="defaultColors" title="Built-in recipes and the Triaged tag get their default colours; your own recipes keep theirs">Default colours</button>
         <span class="spacer"></span>
-        <button id="export">Export…</button>
-        <button id="import">Import…</button>
+        <button id="export" title="Save all recipes and their learned examples to a file. The API key is not included.">Export…</button>
+        <button id="import" title="Load recipes from a backup file. Recipes with the same tag key are replaced, others are added. Then click Save.">Import…</button>
         <input type="file" id="importFile" accept=".json,application/json" hidden>
       </div>
       <p class="hint">Export saves recipes and learned examples to a backup file. The API key is not included.</p>
@@ -101,19 +102,19 @@
       <summary><span class="dot"></span><span class="title"></span><span class="meta"></span></summary>
       <fieldset>
         <div class="row">
-          <label>Name <input type="text" name="name" required></label>
-          <label>Tag key <input type="text" name="key" pattern="[a-z0-9_]+" required spellcheck="false"></label>
-          <label>Colours (dark · light) <span class="pair"><input type="color" name="color" title="Dark theme"><input type="color" name="colorLight" title="Light theme"></span></label>
-          <label>Threshold <input type="number" name="threshold" min="0" max="1" step="0.05"></label>
+          <label title="Shown in menus and as the tag's name in Thunderbird.">Name <input type="text" name="name" required></label>
+          <label title="The tag's internal name: lowercase letters, digits and _, unique per recipe. If you change it, mail tagged earlier keeps the old tag.">Tag key <input type="text" name="key" pattern="[a-z0-9_]+" required spellcheck="false"></label>
+          <label title="The tag's colour on a dark and on a light Thunderbird theme.">Colours (dark · light) <span class="pair"><input type="color" name="color" title="Dark theme"><input type="color" name="colorLight" title="Light theme"></span></label>
+          <label title="How sure Jev must be before the recipe matches, from 0 to 1. 0.8 means 80% sure. Raise it for recipes that move or junk mail.">Threshold <input type="number" name="threshold" min="0" max="1" step="0.05"></label>
         </div>
-        <label>Question <textarea name="question" rows="2"></textarea></label>
+        <label title="One yes/no question. Refer to the mail as `email` and to yourself as `me`. Jev reads it literally.">Question <textarea name="question" rows="2"></textarea></label>
         <div class="grid2">
-          <label>Counts as yes <textarea name="yes" rows="3"></textarea></label>
-          <label>Counts as no <textarea name="no" rows="3"></textarea></label>
+          <label title="What a yes means, including boundary cases. Write down what you actually mean.">Counts as yes <textarea name="yes" rows="3"></textarea></label>
+          <label title="What a no means, including the cases that look like a yes but aren't.">Counts as no <textarea name="no" rows="3"></textarea></label>
         </div>
         <div class="grid2">
-          <label>When it matches <select name="action"></select></label>
-          <label class="folder">Folder <select name="folder"></select></label>
+          <label title="A match always adds the tag. This can do one more thing: star, mark read, mark as junk, or move.">When it matches <select name="action"></select></label>
+          <label class="folder" title="Where matching mail moves. “Every account” uses the folder with that name in each email's own account, and creates it if needed.">Folder <select name="folder"></select></label>
         </div>
         <div class="newfolder" hidden>
           <label>Create in <select class="parent"></select></label>
@@ -124,12 +125,12 @@
             <button type="button" class="cancel">Cancel</button>
           </div>
         </div>
-        <label class="check"><input type="checkbox" name="skipKnown"> Never match mail from people I know: in my address books, or people I've sent mail to</label>
+        <label class="check" title="Checked inside Thunderbird: contacts in local address books and recipients of your sent mail. Your own addresses never count."><input type="checkbox" name="skipKnown"> Never match mail from people I know: in my address books, or people I've sent mail to</label>
         <details class="examples"><summary></summary><ul></ul></details>
         <div class="toolbar">
-          <button type="button" class="clear">Forget examples</button>
+          <button type="button" class="clear" title="Remove all learned examples of this recipe. Takes effect when you Save.">Forget examples</button>
           <span class="spacer"></span>
-          <button type="button" class="remove danger">Remove recipe</button>
+          <button type="button" class="remove danger" title="Remove this recipe. Takes effect when you Save.">Remove recipe</button>
         </div>
       </fieldset>
     </details>

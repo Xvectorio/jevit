@@ -101,6 +101,7 @@ const DEFAULTS = {
   consent: false, // explicit opt-in before any mail content leaves Thunderbird (ATN policy)
   model: "jev-latest",
   autoTriage: false,
+  skipTriaged: true, // triaging selected mail skips mail that already has the Triaged tag
   colorScheme: "auto", // tag colour set: "auto" follows Thunderbird's theme, or "light" / "dark"
   triagedColor: "#DFDDD9", // warm light grey on dark themes
   triagedColorLight: "#403A47", // dark plum grey on light themes

@@ -17,6 +17,7 @@ function read() {
   s.consent = $("#consent").checked;
   s.model = $("#model").value.trim() || DEFAULTS.model;
   s.autoTriage = $("#autoTriage").checked;
+  s.skipTriaged = $("#skipTriaged").checked;
   s.triagedColor = $("#triagedColor").value;
   s.triagedColorLight = $("#triagedColorLight").value;
   s.colorScheme = $("#colorScheme").value;
@@ -35,6 +36,7 @@ function render() {
   showKeyHint();
   $("#model").value = s.model;
   $("#autoTriage").checked = s.autoTriage;
+  $("#skipTriaged").checked = s.skipTriaged;
   $("#triagedColor").value = s.triagedColor;
   $("#triagedColorLight").value = s.triagedColorLight;
   $("#colorScheme").value = s.colorScheme;
