@@ -23,12 +23,12 @@ $("#help").onclick = () => messenger.tabs.create({ url: "help.html" });
   for (const [i, r] of settings.recipes.entries()) {
     const p = result.answers[r.key]?.noul ?? 0;
     const tr = $("#rows").insertRow();
-    tr.innerHTML = `<td><label><input type="checkbox" id="c${i}"> <span></span></label></td>
-      <td><meter min="0" max="1" low="${r.threshold}" optimum="0"></meter></td>
+    tr.innerHTML = `<td><label><input type="checkbox"> <span></span></label></td>
+      <td><meter min="0" max="1" optimum="0"></meter></td>
       <td class="hint"></td>`;
-    tr.querySelector("input").checked = result.keys.includes(r.key);
+    Object.assign(tr.querySelector("input"), { id: `c${i}`, checked: result.keys.includes(r.key) });
     tr.querySelector("span").textContent = r.name;
-    tr.querySelector("meter").value = p;
+    Object.assign(tr.querySelector("meter"), { low: r.threshold, value: p });
     tr.querySelector(".hint").textContent = result.known && r.skipKnown
       ? `${Math.round(p * 100)}%, but you know this sender: not tagged`
       : `${Math.round(p * 100)}% (tag at ${Math.round(r.threshold * 100)}%)`;
