@@ -17,10 +17,11 @@ Unofficial; not affiliated with TypeSafe.
 - Teach Jev from your corrections: right-click → JevIt → "This is …" / "This is not …". Shortcuts: Alt+Shift+S (spam), Alt+Shift+D (not spam).
 - See Jev's scores for the open email in the message-header popup, then correct and apply them.
 - Triage selected mail from the context menu, or automatically for new mail. Already triaged mail is skipped by default.
-- Progress on the toolbar button while triaging. Click the button to stop a long run.
+- Progress on the toolbar button while triaging. Click the button to stop a long run. When a manual run is done, one notification sums up what each recipe matched.
 - A Triaged tag on every mail Jev has judged, and tag colours for both light and dark themes.
 - Careful with uncertain mail: star, mark read, junk and move only happen when Jev is at least 90% sure. Below that, and for near misses, mail gets an Unsure tag to review and teach Jev from.
 - Move matches to one folder, or to a folder of the same name in each account (such as each account's own Junk).
+- Jev sees where links really go (the host name behind each link text), which helps the Spam and Phishing recipes. Links are never opened.
 - Mail from your contacts, or from people you've written to, is never tagged as Spam, when your mail server's DMARC check confirms the sender. This is checked locally.
 - Exclude accounts: mail in them is never sent to Jev.
 - Jev's scores are remembered locally: the header popup, and triaging mail again after changing a threshold, cost nothing. Only edited or taught recipes are asked again.
