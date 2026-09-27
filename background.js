@@ -2,7 +2,7 @@
 // Automatic triage runs on every new mail: show each kind of problem once per session, not each time.
 // `reason` groups messages that differ only in details (counts, server replies).
 const notified = new Set();
-let shown = Promise.resolve(); // one notification call at a time, so a fast run's summary can't overtake its start notice
+let shown = Promise.resolve(); // one notification call at a time, so they arrive in order
 function notify(message, manual, reason = message) {
   if (!manual && notified.has(reason)) return;
   if (!manual) notified.add(reason);
@@ -22,8 +22,6 @@ async function triageList(list, manual) {
   await syncTags(s);
   let failed = 0, skipped = 0, excluded = 0, judged = 0, free = 0, review = 0, firstError, halted, stopped;
   const matched = new Map(); // recipe key -> mails it matched
-  // Big selections arrive in pages, so the total is only known for one page.
-  if (manual) notify(`Triaging ${list.messages.length}${list.id ? "+" : ""} mail(s)… The JevIt toolbar button counts them; click it to stop.`, true);
   running++;
   try {
     // A few mails at a time, all pulling from one list; a break in one ends the list for all.
