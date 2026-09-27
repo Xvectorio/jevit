@@ -44,7 +44,7 @@ function render() {
   $("#excludedAccounts").replaceChildren(...Object.entries(accounts).map(([id, name]) => {
     const label = document.createElement("label");
     label.className = "check";
-    label.innerHTML = `<input type="checkbox"> <span>Never send mail from <b></b> to Jev</span>`;
+    label.innerHTML = `<input type="checkbox"> <span>Never send mail in account <b></b> to Jev</span>`;
     label.querySelector("b").textContent = name;
     Object.assign(label.querySelector("input"), { value: id, checked: s.excludedAccounts.includes(id) });
     return label;
