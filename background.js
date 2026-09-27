@@ -85,7 +85,7 @@ async function buildMenus() {
   const { recipes } = await loadSettings();
   await messenger.menus.removeAll();
   const add = (props) => messenger.menus.create({ contexts: ["message_list"], ...props });
-  add({ id: "root", title: "JevIt", icons: { 16: "icon.svg" } });
+  add({ id: "root", title: "JevIt", icons: { 16: "icon-32.png" } });
   add({ id: "triage", parentId: "root", title: "Triage with Jev" });
   add({ id: "sep1", parentId: "root", type: "separator" });
   for (const r of recipes) {

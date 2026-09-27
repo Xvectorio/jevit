@@ -36,7 +36,7 @@ There's no build step. To try it, go to Add-ons → gear → Debug Add-ons → L
 
 ```sh
 node test.js      # logic tests; set TYPESAFE_API_KEY to also run the default recipes against Jev
-zip jevit.xpi manifest.json LICENSE icon.svg jev.js background.js popup.* options.* help.html style.css
+zip jevit.xpi manifest.json LICENSE icon-*.png jev.js background.js popup.* options.* help.html style.css
 ```
 
 ## License
