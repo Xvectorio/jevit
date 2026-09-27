@@ -137,10 +137,11 @@ const DEFAULTS = {
   consent: false, // explicit opt-in before any mail content leaves Thunderbird (ATN policy)
   model: "jev-latest",
   autoTriage: false,
-  skipTriaged: true, // triaging selected mail skips mail that already has the Triaged tag
+  skipTriaged: true, // triaging selected mail skips mail Jev already judged: Triaged tag or stored scores
+  triagedTag: true, // tag every judged mail Triaged. Thunderbird fills a selected row with its first tag's colour, so off keeps untouched mail looking as before
   excludedAccounts: [], // account ids whose mail is never sent to Jev
   colorScheme: "auto", // tag colour set: "auto" follows Thunderbird's theme, or "light" / "dark"
-  triagedColor: "#FFFFFF", // plain text colour, so triaged mail looks as before
+  triagedColor: "#FFFFFF", // close to Thunderbird's own text colour, so triaged mail looks as before
   triagedColorLight: "#000000",
   budget: 1, // USD per calendar month; 0 = no limit
   pricePerMtok: 0.042, // USD per million input tokens (jev-1.13; output tokens are free)
@@ -415,6 +416,12 @@ async function emailState(id, bodyChars) {
   };
 }
 
+// Has Jev judged this exact email before (stored scores, kept SCORE_DAYS)? Works without the Triaged tag.
+async function judgedBefore(id, bodyChars) {
+  const key = await scoreKey(await emailState(id, bodyChars));
+  return !!(await messenger.storage.local.get(key))[key];
+}
+
 async function classify(id, settings) {
   // Consent and budget are read fresh, so changing them in the manager takes effect mid-batch.
   // Their errors have cause "halt": the rest of a batch would fail the same way.
@@ -530,7 +537,7 @@ async function syncTags(settings) {
   const scheme = activeScheme(settings);
   const triaged = { ...TRIAGED, color: settings.triagedColor, colorLight: settings.triagedColorLight };
   const existing = new Map((await messenger.messages.tags.list()).map((t) => [t.key, t]));
-  for (const r of [...settings.recipes, triaged, ...(settings.unsureMargin > 0 ? [UNSURE] : [])]) {
+  for (const r of [...settings.recipes, ...(settings.triagedTag ? [triaged] : []), ...(settings.unsureMargin > 0 ? [UNSURE] : [])]) {
     const color = colorFor(r, scheme).toUpperCase();
     const taken = [...existing.values()].some((t) => t.key !== r.key && t.tag.toLowerCase() === r.name.toLowerCase());
     const name = taken ? `${r.name} (JevIt)` : r.name;
@@ -564,5 +571,5 @@ async function* iterate(list) {
 }
 
 if (typeof module !== "undefined") {
-  module.exports = { DEFAULTS, RECIPE_LIBRARY, cleanBody, linkHosts, updateRecipes, questionFor, questionsFor, reuse, remember, classify, pruneScores, decide, certainty, dmarcPass, plan, addExample, draftRecipe, parseBackup, askJev, resolveFolder, applyRecipes, knownSender, emailState, authServId, trustedServer, addUsage, budgetLeft, money, syncTags, colorFor, activeScheme, PALETTE };
+  module.exports = { DEFAULTS, RECIPE_LIBRARY, cleanBody, linkHosts, updateRecipes, questionFor, questionsFor, reuse, remember, classify, judgedBefore, pruneScores, decide, certainty, dmarcPass, plan, addExample, draftRecipe, parseBackup, askJev, resolveFolder, applyRecipes, knownSender, emailState, authServId, trustedServer, addUsage, budgetLeft, money, syncTags, colorFor, activeScheme, PALETTE };
 }

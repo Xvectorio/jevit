@@ -35,13 +35,14 @@ async function triageList(list, manual) {
           continue;
         }
         // Only for mail you pick: new mail can't have been triaged yet, so a Triaged tag on it didn't come from JevIt.
-        if (manual && s.skipTriaged && m.tags.includes(TRIAGED.key)) {
+        // The tag can be turned off, so stored scores count too (for SCORE_DAYS).
+        if (manual && s.skipTriaged && (m.tags.includes(TRIAGED.key) || (await judgedBefore(m.id, s.bodyChars)))) {
           skipped++;
           continue;
         }
         try {
           const { keys, answers, act, unsure, paid } = await classify(m.id, s);
-          await applyRecipes(m.id, s.recipes, keys, answers, true, { act, unsure });
+          await applyRecipes(m.id, s.recipes, keys, answers, s.triagedTag, { act, unsure });
           judged++, free += !paid, review += unsure;
           for (const k of keys) matched.set(k, (matched.get(k) ?? 0) + 1);
         } catch (e) {

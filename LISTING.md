@@ -17,7 +17,7 @@ JevIt sorts your mail with **recipes**. A recipe is one plain-language yes/no qu
 - Teach Jev: right-click mail → JevIt → "This is …" / "This is not …". The mail becomes an example the recipe learns from. Shortcuts: Alt+Shift+S (spam) and Alt+Shift+D (not spam).
 - Review Jev's scores for the open email in the header popup, then correct and apply them.
 - Triage selected mail from the context menu, or turn on automatic triage for new mail. Already triaged mail is skipped by default. The toolbar button counts the mails done, and a click stops a long run.
-- A Triaged tag on every mail Jev has judged, and tag colours for both light and dark themes.
+- A Triaged tag on every mail Jev has judged (optional), and tag colours for both light and dark themes.
 - Careful with uncertain mail: star, mark read, junk and move only happen when Jev is at least 90% sure. Below that, and for near misses, mail gets an Unsure tag to review and teach Jev from.
 - Move matches to one folder, or to a folder of the same name in each account (such as each account's own Junk).
 - Exclude accounts: mail in an excluded account is never sent to Jev.

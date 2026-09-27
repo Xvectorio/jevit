@@ -45,6 +45,6 @@ $("#apply").onclick = async () => {
     if (wrong.length) await messenger.storage.local.set({ recipes: settings.recipes });
   }
   await syncTags(settings);
-  await applyRecipes(msgId, settings.recipes, checked, result.answers, true);
+  await applyRecipes(msgId, settings.recipes, checked, result.answers, settings.triagedTag);
   window.close();
 };

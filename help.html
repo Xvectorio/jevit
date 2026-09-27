@@ -60,7 +60,7 @@
       </dl>
       <p>Triaging an email again replaces JevIt's tags on it. Your own Thunderbird tags are never touched.
         Moves, stars, read and junk flags are not undone.</p>
-      <p><b>Skip already triaged mail</b> (Connection section, on by default): when you triage selected mail, emails that already have the Triaged tag are skipped,
+      <p><b>Skip already triaged mail</b> (Connection section, on by default): when you triage selected mail, emails Jev already judged (they have the Triaged tag, or stored scores from the last 90 days) are skipped,
         so triaging a whole folder again doesn't cost anything twice. Untick it to apply your recipes to them again, for example after changing a threshold.</p>
       <p><b>Jev's scores are remembered.</b> JevIt stores Jev's score for every email and recipe on your computer, for 90 days. Opening the header popup, or triaging an email again,
         reuses them for free, even when this month's budget is used up. Only a recipe you edited or taught since, or a new recipe, is sent to Jev again, and so is an email whose content changed.</p>
@@ -174,7 +174,10 @@
       <h2>The Triaged tag</h2>
       <p>Every email Jev has judged gets a <b>Triaged</b> tag, whether or not any recipe matched. Teaching doesn't add it, and neither does a failed triage.
         Use Thunderbird's quick filter or a saved search on this tag to see what JevIt has processed, or what it hasn't yet.
-        You can change its colour in the Connection section.</p>
+        You can change its colour in the Connection section. It starts close to Thunderbird's own text colour, so triaged mail looks as before.</p>
+      <p>Thunderbird fills a <b>selected</b> row with the colour of its first tag, so a selected triaged email looks different from an untagged one.
+        If that bothers you, untick <b>Tag every judged email “Triaged”</b>. Mail no recipe matched then stays exactly as it was,
+        and “Skip already triaged mail” recognises judged mail by Jev's stored scores instead (for 90 days).</p>
     </section>
 
     <section class="card" id="unsure">
@@ -261,7 +264,7 @@
         <dd>It says why: no API key, consent not given, budget reached, or an error from Jev (for example 401 for an invalid key). Click it to open the manager.
           For automatic triage you get this at most once per Thunderbird session.</dd>
         <dt>An email has no Triaged tag</dt>
-        <dd>It hasn't been triaged, or its triage failed. Select it and choose JevIt → Triage with Jev.</dd>
+        <dd>It hasn't been triaged, its triage failed, or the Triaged tag is turned off. Select it and choose JevIt → Triage with Jev.</dd>
         <dt>A recipe matches too much or too little</dt>
         <dd>Adjust the threshold, sharpen the yes/no descriptions, or teach it with “This is / This is not”.</dd>
         <dt>Mail from a contact still gets tagged as spam</dt>

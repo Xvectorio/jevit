@@ -19,6 +19,7 @@ function read() {
   s.autoTriage = $("#autoTriage").checked;
   s.skipTriaged = $("#skipTriaged").checked;
   s.excludedAccounts = [...document.querySelectorAll("#excludedAccounts input:checked")].map((c) => c.value);
+  s.triagedTag = $("#triagedTag").checked;
   s.triagedColor = $("#triagedColor").value;
   s.triagedColorLight = $("#triagedColorLight").value;
   s.colorScheme = $("#colorScheme").value;
@@ -49,6 +50,7 @@ function render() {
     Object.assign(label.querySelector("input"), { value: id, checked: s.excludedAccounts.includes(id) });
     return label;
   }));
+  $("#triagedTag").checked = s.triagedTag;
   $("#triagedColor").value = s.triagedColor;
   $("#triagedColorLight").value = s.triagedColorLight;
   $("#colorScheme").value = s.colorScheme;

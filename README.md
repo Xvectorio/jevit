@@ -18,7 +18,7 @@ Unofficial; not affiliated with TypeSafe.
 - See Jev's scores for the open email in the message-header popup, then correct and apply them.
 - Triage selected mail from the context menu, or automatically for new mail. Already triaged mail is skipped by default.
 - Progress on the toolbar button while triaging. Click the button to stop a long run. When a manual run is done, one notification sums up what each recipe matched.
-- A Triaged tag on every mail Jev has judged, and tag colours for both light and dark themes.
+- A Triaged tag on every mail Jev has judged (optional), and tag colours for both light and dark themes.
 - Careful with uncertain mail: star, mark read, junk and move only happen when Jev is at least 90% sure. Below that, and for near misses, mail gets an Unsure tag to review and teach Jev from.
 - Move matches to one folder, or to a folder of the same name in each account (such as each account's own Junk).
 - Jev sees where links really go (the host name behind each link text), which helps the Spam and Phishing recipes. Links are never opened.

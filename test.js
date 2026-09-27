@@ -1,6 +1,6 @@
 // node test.js  (set TYPESAFE_API_KEY to also run the default recipes against Jev)
 const assert = require("node:assert");
-const { DEFAULTS, RECIPE_LIBRARY, cleanBody, linkHosts, updateRecipes, questionFor, questionsFor, reuse, remember, classify, pruneScores, decide, certainty, dmarcPass, plan, addExample, draftRecipe, parseBackup, askJev, resolveFolder, applyRecipes, knownSender, emailState, authServId, trustedServer, addUsage, budgetLeft, money, syncTags, colorFor, activeScheme, PALETTE } = require("./jev.js");
+const { DEFAULTS, RECIPE_LIBRARY, cleanBody, linkHosts, updateRecipes, questionFor, questionsFor, reuse, remember, classify, judgedBefore, pruneScores, decide, certainty, dmarcPass, plan, addExample, draftRecipe, parseBackup, askJev, resolveFolder, applyRecipes, knownSender, emailState, authServId, trustedServer, addUsage, budgetLeft, money, syncTags, colorFor, activeScheme, PALETTE } = require("./jev.js");
 
 assert.equal(cleanBody("Hi\n> old quote\n\n\n\n  Bye  "), "Hi\n\nBye");
 assert.equal(cleanBody("x".repeat(9000)).length, 3000);
@@ -187,6 +187,9 @@ global.messenger = { folders: {
   const rental = { key: "jev_123", name: "Rental", color: "#FF7800", colorLight: "#FF7800" };
   await syncTags({ ...settings, recipes: [rental], unsureMargin: 0 });
   assert.deepEqual(calls[0], ["create", "jev_123", "Rental (JevIt)", "#FF7800"]);
+  calls.length = 0;
+  await syncTags({ ...settings, recipes: [], unsureMargin: 0, triagedTag: false });
+  assert.deepEqual(calls, [], "no Triaged tag created when it's turned off");
 
   // Known senders: exact address in a contact, or a recipient in Sent; never your own address.
   global.messenger = {
@@ -287,6 +290,9 @@ global.messenger = { folders: {
   assert.equal(Object.keys(local).filter((k) => k.startsWith("score:")).length, 1);
   const [scored] = Object.keys(local).filter((k) => k.startsWith("score:"));
   assert.ok(Date.now() - local[scored].at < 1000, "stored with the time Jev was asked");
+  assert.equal(await judgedBefore(1, s2.bodyChars), false, "changed email: not judged before");
+  body = "Claim your prize";
+  assert.equal(await judgedBefore(1, s2.bodyChars), true, "stored scores mark mail as judged, without the Triaged tag");
   Object.assign(local, { "score:old": { at: Date.now() - 91 * 864e5, x: 1 }, "score:notime": { x: 1 } });
   messenger.storage.local.get = async (k) => (k === null ? { ...local } : assert.fail("get(null) only"));
   messenger.storage.local.remove = async (keys) => keys.forEach((k) => delete local[k]);
