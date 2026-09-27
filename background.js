@@ -20,33 +20,37 @@ async function triageList(list, manual) {
   let failed = 0, skipped = 0, excluded = 0, firstError, halted;
   running++;
   try {
-    // ponytail: one message at a time; parallelize if big batches feel slow (limit: 1200 req/min)
-    for await (const m of iterate(list)) {
-      if (stop) break;
-      if (s.excludedAccounts.includes(m.folder?.accountId)) {
-        excluded++;
-        continue;
-      }
-      // Only for mail you pick: new mail can't have been triaged yet, so a Triaged tag on it didn't come from JevIt.
-      if (manual && s.skipTriaged && m.tags.includes(TRIAGED.key)) {
-        skipped++;
-        continue;
-      }
-      try {
-        const { keys, answers } = await classify(m.id, s);
-        await applyRecipes(m.id, s.recipes, keys, answers, true);
-      } catch (e) {
-        if (e.cause === "halt") {
-          halted = e;
-          break;
+    // A few mails at a time, all pulling from one list; a break in one ends the list for all.
+    // ponytail: fixed 4 in flight (~4 req/s, well under the 1200 req/min limit); 429s back off in askJev
+    const messages = iterate(list);
+    await Promise.all(Array.from({ length: 4 }, async () => {
+      for await (const m of messages) {
+        if (stop) break;
+        if (s.excludedAccounts.includes(m.folder?.accountId)) {
+          excluded++;
+          continue;
         }
-        failed++;
-        firstError ??= e;
-        console.error("JevIt:", m.subject, e);
+        // Only for mail you pick: new mail can't have been triaged yet, so a Triaged tag on it didn't come from JevIt.
+        if (manual && s.skipTriaged && m.tags.includes(TRIAGED.key)) {
+          skipped++;
+          continue;
+        }
+        try {
+          const { keys, answers } = await classify(m.id, s);
+          await applyRecipes(m.id, s.recipes, keys, answers, true);
+        } catch (e) {
+          if (e.cause === "halt") {
+            halted = e;
+            break;
+          }
+          failed++;
+          firstError ??= e;
+          console.error("JevIt:", m.subject, e);
+        }
+        done++;
+        showBudgetBadge().catch(console.error);
       }
-      done++;
-      showBudgetBadge().catch(console.error);
-    }
+    }));
   } finally {
     if (!--running) done = 0, stop = false;
     showBudgetBadge().catch(console.error);

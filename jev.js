@@ -242,6 +242,10 @@ function parseBackup(text) {
   });
 }
 
+// Runs fn once the previous serial() call has settled: parallel triage shares the usage counters and folders.
+let queue = Promise.resolve();
+const serial = (fn) => (queue = queue.then(fn, fn));
+
 async function askJev({ apiKey, model }, state, questions) {
   for (let attempt = 0; ; attempt++) {
     const r = await fetch(JEV_API, {
@@ -333,9 +337,8 @@ async function classify(id, settings) {
         .catch((e) => (console.warn("JevIt: known-sender check failed", e), false))
       : false,
   ]);
-  // ponytail: read-modify-write; a popup and a background batch finishing at the same moment can drop one count
-  const usage = addUsage(await loadUsage(), month, response.usage?.input_tokens ?? 0, settings.pricePerMtok);
-  await messenger.storage.local.set({ usage });
+  // ponytail: serial() only covers this page; a popup and a background batch finishing at the same moment can drop one count
+  await serial(async () => messenger.storage.local.set({ usage: addUsage(await loadUsage(), month, response.usage?.input_tokens ?? 0, settings.pricePerMtok) }));
   return { state, answers: response.answers, known, keys: decide(settings.recipes, response.answers, known) };
 }
 
@@ -427,12 +430,14 @@ async function syncTags(settings) {
 // (top-most match wins) and created at the account's top level if that account doesn't have it yet.
 async function resolveFolder(folder, accountId) {
   if (!folder.startsWith(EVERY_ACCOUNT)) return folder;
-  const name = folder.slice(EVERY_ACCOUNT.length);
-  const found = (await messenger.folders.query({ accountId, name }))
-    .sort((a, b) => a.path.split("/").length - b.path.split("/").length)[0];
-  if (found) return found.id;
-  const [root] = await messenger.folders.query({ accountId, isRoot: true });
-  return (await messenger.folders.create(root.id, name)).id;
+  return serial(async () => { // parallel mails into a folder that doesn't exist yet must create it once
+    const name = folder.slice(EVERY_ACCOUNT.length);
+    const found = (await messenger.folders.query({ accountId, name }))
+      .sort((a, b) => a.path.split("/").length - b.path.split("/").length)[0];
+    if (found) return found.id;
+    const [root] = await messenger.folders.query({ accountId, isRoot: true });
+    return (await messenger.folders.create(root.id, name)).id;
+  });
 }
 
 async function* iterate(list) {

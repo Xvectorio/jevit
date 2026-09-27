@@ -106,6 +106,8 @@ global.messenger = { folders: {
   assert.equal(await resolveFolder("*:Spam", "b"), "b:/Spam", "created in the account that lacks it");
   assert.equal(await resolveFolder("*:Spam", "b"), "b:/Spam", "and found, not re-created, next time");
   assert.equal(store.length, 5);
+  const twice = await Promise.all([resolveFolder("*:Later", "a"), resolveFolder("*:Later", "a")]);
+  assert.deepEqual([twice, store.length], [["a:/Later", "a:/Later"], 6], "parallel mails create a missing folder once");
 
   // Triaged tag: added when Jev judged the mail, kept by later teaching; the user's own tags survive.
   const msg = { id: 1, tags: ["$label1", "jev_spam"], folder: { id: "a:/INBOX", accountId: "a" } };
