@@ -6,7 +6,7 @@ Paste these into the fields at https://addons.thunderbird.net/developers/ when s
 JevIt: AI mail triage
 
 ## Summary (≤ 250 characters)
-Triage your mail with TypeSafe's Jev model: recipes tag, star, mark read, junk or move mail. Tune them, teach Jev from your corrections, and back them up. Uses your own TypeSafe API key. Unofficial; not affiliated with TypeSafe.
+AI mail triage with TypeSafe's Jev: plain-language recipes tag, star, junk or move mail. Ready-made recipes for spam, invoices, newsletters and more; teach Jev from your corrections. Uses your own API key. Unofficial; not affiliated with TypeSafe.
 
 ## Description
 JevIt sorts your mail with **recipes**. A recipe is one plain-language yes/no question, such as "Is this an invoice or receipt?", which TypeSafe's Jev model answers for each email with a probability. When the probability reaches the recipe's threshold, JevIt tags the email and can also star it, mark it read, mark it as junk, or move it to a folder.
@@ -37,6 +37,9 @@ Tags; Filters
 
 ## Support
 Email: jevit@xvector.io
+
+## Contributions URL
+https://ko-fi.com/jevit
 
 ## License
 Mozilla Public License 2.0 (MPL-2.0)

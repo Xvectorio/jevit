@@ -313,6 +313,10 @@ $("#help").onclick = (e) => {
   e.preventDefault();
   messenger.tabs.create({ url: "help.html" });
 };
+$("#kofi").onclick = (e) => {
+  e.preventDefault();
+  messenger.windows.openDefaultBrowser(e.currentTarget.href);
+};
 
 // Move targets, and where new folders can go (account top levels first). Labels read "Account/path".
 async function loadFolders() {

@@ -4,6 +4,8 @@ A Thunderbird add-on that sorts your mail with **recipes**: plain-language yes/n
 
 Unofficial; not affiliated with TypeSafe.
 
+**Install:** [JevIt on addons.thunderbird.net](https://addons.thunderbird.net/addon/jevit-ai-mail-triage/), or in Thunderbird search for "JevIt" under Add-ons and Themes.
+
 | Connection, usage and budget | Recipes |
 |---|---|
 | ![JevIt manager: connection, usage and budget](screenshots/manager.png) | ![JevIt manager: recipes](screenshots/recipes.png) |
@@ -38,6 +40,10 @@ There's no build step. To try it, go to Add-ons → gear → Debug Add-ons → L
 node test.js      # logic tests; set TYPESAFE_API_KEY to also run the default recipes against Jev
 zip jevit.xpi manifest.json LICENSE icon-*.png jev.js background.js popup.* options.* help.html style.css
 ```
+
+## Support
+
+JevIt is free. If it saves you time, you can buy me a coffee at [ko-fi.com/jevit](https://ko-fi.com/jevit).
 
 ## License
 
