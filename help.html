@@ -91,7 +91,7 @@
         <dd>The tag's internal name: lowercase letters, digits and <code>_</code>, unique per recipe. If you change it, mail tagged earlier keeps the old tag.</dd>
       </dl>
       <p><b>Adding recipes.</b> Use <b>Add recipe…</b> under the list. You can choose a blank recipe or a ready-made one:
-        Meeting / event, Shipping, Security alert, Personal, Social or Jobs / recruiting, plus any of the five defaults you removed.</p>
+        Meeting / event, Shipping, Security alert, Phishing, Personal, Social or Jobs / recruiting, plus any of the five defaults you removed.</p>
       <p><b>More like this.</b> Select example emails, right-click and choose <b>JevIt → New recipe from selected mail…</b>.
         This opens a new recipe named after the sender. Its question is “is this the same kind of mail as these examples?”, with the selected emails as yes-examples.
         Check the wording and click <b>Save</b>. These recipes depend on their examples, so add a few “This is not …” examples when they match too much.</p>
@@ -233,7 +233,7 @@
       <h2>Privacy</h2>
       <ul>
         <li>Only after you tick consent, and only for mail you triage, JevIt sends TypeSafe (api.typesafe.ai) the following, over HTTPS with your own key:
-          the sender, recipients, subject and text (quoted replies, styling and link paths removed, up to 3000 characters; change the text limit in the manager), the Authentication-Results and List-Unsubscribe headers, your address, and your recipes with their examples.</li>
+          the sender, recipients, subject and text (quoted replies, styling and link paths removed, up to 3000 characters; change the text limit in the manager), the Authentication-Results, List-Unsubscribe and Reply-To headers, the text and host name of up to 10 links (never opened), the names and types of up to 10 attachments (never their contents), your address, and your recipes with their examples.</li>
         <li>Nothing is sent to the JevIt author. There's no tracking or analytics.</li>
         <li>Your key, recipes, settings and usage counters stay in Thunderbird. The known-sender check runs locally.</li>
         <li>Untick consent to stop all requests immediately. JevIt is not affiliated with TypeSafe.</li>

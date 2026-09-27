@@ -12,7 +12,7 @@ Unofficial; not affiliated with TypeSafe.
 
 ## Features
 
-- Ready-made recipes: Spam, Needs reply, Newsletter, Invoice / receipt, Urgent, Meeting / event, Shipping, Security alert, Personal, Social, Jobs / recruiting.
+- Ready-made recipes: Spam, Needs reply, Newsletter, Invoice / receipt, Urgent, Meeting / event, Shipping, Security alert, Phishing, Personal, Social, Jobs / recruiting.
 - Write your own recipes, or create one from selected mail ("more like this").
 - Teach Jev from your corrections: right-click → JevIt → "This is …" / "This is not …". Shortcuts: Alt+Shift+S (spam), Alt+Shift+D (not spam).
 - See Jev's scores for the open email in the message-header popup, then correct and apply them.

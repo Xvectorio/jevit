@@ -12,7 +12,7 @@ AI mail triage with TypeSafe's Jev: plain-language recipes tag, star, junk or mo
 JevIt sorts your mail with **recipes**. A recipe is one plain-language yes/no question, such as "Is this an invoice or receipt?", which TypeSafe's Jev model answers for each email with a probability. When the probability reaches the recipe's threshold, JevIt tags the email and can also star it, mark it read, mark it as junk, or move it to a folder.
 
 **Features**
-- Ready-made recipes: Spam, Needs reply, Newsletter, Invoice / receipt, Urgent, Meeting / event, Shipping, Security alert, Personal, Social, Jobs / recruiting.
+- Ready-made recipes: Spam, Needs reply, Newsletter, Invoice / receipt, Urgent, Meeting / event, Shipping, Security alert, Phishing, Personal, Social, Jobs / recruiting.
 - Write your own recipes, or create one from selected mail ("more like this").
 - Teach Jev: right-click mail → JevIt → "This is …" / "This is not …". The mail becomes an example the recipe learns from. Shortcuts: Alt+Shift+S (spam) and Alt+Shift+D (not spam).
 - Review Jev's scores for the open email in the header popup, then correct and apply them.
@@ -52,7 +52,9 @@ JevIt is a Thunderbird add-on that classifies email with TypeSafe's Jev model. T
 
 **What is sent, and to whom.** Only after you tick "JevIt may send the content of emails I triage to TypeSafe" in the JevIt manager, JevIt sends the following to TypeSafe (https://api.typesafe.ai) over an encrypted HTTPS connection, for each email you triage:
 - the email's sender, recipients (To and CC), subject, and text body. Quoted replies, styling and link paths are removed, and the body is limited to 3000 characters (adjustable in the manager).
-- two of the email's headers: Authentication-Results (your mail server's SPF, DKIM and DMARC verdict, which helps spot forged senders) and List-Unsubscribe (which helps spot bulk mail).
+- three of the email's headers: Authentication-Results (your mail server's SPF, DKIM and DMARC verdict, which helps spot forged senders), List-Unsubscribe (which helps spot bulk mail) and Reply-To (where replies really go).
+- for up to 10 links, the link's text and the host name it points to (such as "Log in → example.com"), without paths or tracking codes. Links are never opened.
+- the names and types of up to 10 attachments, never their contents.
 - the email address of your account's default identity, so recipes can tell whether mail is addressed to you.
 - your recipes: their questions and descriptions, and their learned examples (sender, subject and the first 300 characters of example emails you marked).
 

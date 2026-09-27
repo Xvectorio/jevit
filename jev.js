@@ -3,6 +3,8 @@ const JEV_API = "https://api.typesafe.ai/v1/systemone";
 const HEADER_CHARS = 1000; // per header (and per address, subject, sender), so a sender can't inflate the request
 const MAX_RECIPIENTS = 20; // To and Cc each; enough to tell a personal mail from a mass mailing
 const MAX_EXAMPLES = 20; // per recipe, newest kept; examples ride along in every request (~100 tokens each)
+const MAX_LINKS = 10; // link hosts per mail; phishing gives itself away in where links go, not in what they say
+const MAX_ATTACHMENTS = 10; // attachment names and types per mail, not their contents
 
 // A recipe is one yes/no question to Jev. A match always tags the mail; `action` adds one more step.
 const ACTIONS = {
@@ -35,6 +37,7 @@ const PALETTE = {
   jev_social: ["#DDD6FF", "#6347EB"],
   jev_urgent: ["#F8D6FF", "#B417D3"],
   jev_security: ["#FFD6EB", "#CF1773"],
+  jev_phishing: ["#FFDDD6", "#CA3416"],
 };
 const NEW_RECIPE_COLORS = ["#E6E6E6", "#595959"]; // greys for recipes you add yourself
 const defaultColors = (key) => PALETTE[key] ?? NEW_RECIPE_COLORS;
@@ -53,6 +56,7 @@ const RECIPE_LIBRARY = [
       "Scams: prizes, gift cards, inheritances, dating approaches, miracle health or bargain products. " +
       "Cold sales pitches from strangers: web design, SEO, apps, loans, directory listings, wholesale. " +
       "Strong signs: a known brand's name with an unrelated address, odd or look-alike characters, " +
+      "links, Reply-To or attachments that don't fit the sender (see `links`, `attachments`), " +
       "a failing SPF, DKIM or DMARC check in the Authentication-Results header. A passing check proves nothing: spammers sign their own domains.",
     "Mail the recipient signed up for or would expect, such as newsletters, shop mail and notifications from services they use, " +
       "or genuine personal or business correspondence."), skipKnown: true },
@@ -67,7 +71,8 @@ const RECIPE_LIBRARY = [
   recipe("jev_finance", "Invoice / receipt", 0.7,
     "Is `email` an invoice, receipt, payment request, or payment confirmation?",
     "Bills, invoices, receipts, order confirmations with amounts, payment reminders.",
-    "Anything that is not about a specific payment."),
+    "Anything that is not about a specific payment, and fake invoices or payment requests: " +
+      "a sender pretending to be a company, whose address, Reply-To or links belong to an unrelated domain."),
   recipe("jev_urgent", "Urgent", 0.7,
     "Does `email` say that something is urgent, time-critical, or due very soon?",
     "Explicit urgency: ASAP, today, outage, final notice, a deadline that is close.",
@@ -83,7 +88,15 @@ const RECIPE_LIBRARY = [
   recipe("jev_security", "Security alert", 0.7,
     "Is `email` a login alert, verification code, password reset, or other account security notice?",
     "New sign-in alerts, one-time codes, password or 2FA changes, account lock notices.",
-    "Marketing or newsletters that only mention security."),
+    "Marketing or newsletters that only mention security, and phishing: " +
+      "fake alerts whose sender, Reply-To or links belong to a domain other than the company they name."),
+  recipe("jev_phishing", "Phishing", 0.7,
+    "Does `email` pretend to come from a company, service or person, to get `me` to log in, pay, share personal data, or open a file?",
+    "Fake notices from a bank, shop, mail or storage provider, delivery service, government agency or colleague, " +
+      "where the sender, Reply-To or link hosts (see `links`) belong to an unrelated domain. " +
+      "Attachments that are web pages, archives or disk images posing as documents.",
+    "Genuine mail from who it says it is from, with sender and link hosts that belong to them. " +
+      "Ordinary spam and scams that don't pretend to be someone else."),
   recipe("jev_personal", "Personal", 0.7,
     "Was `email` written personally by a human to `me`, rather than sent by an automated system or to a list?",
     "A human wrote this message to the recipient, such as a friend, colleague, or customer.",
@@ -97,6 +110,26 @@ const RECIPE_LIBRARY = [
     "Recruiter outreach, application confirmations, interview invitations, job alerts.",
     "Anything not about hiring or applying for work."),
 ];
+
+// Earlier library wording, as [key, field, old text]. On update, a saved recipe whose field still has exactly that
+// text gets the current library text. A field the user edited, even slightly, is never touched; nor are thresholds,
+// actions, folders, colours or examples.
+// ponytail: entries stay until most users have updated; someone who skips that release just keeps the old wording
+const LIBRARY_UPDATES = [
+  ["jev_spam", "yes", "Phishing: `me`'s mailbox, password, storage, wallet or bank account supposedly needs action, from an address that doesn't belong to that company. Fake business mail: purchase orders, quotes, invoices or payment proofs `me` never asked for, often a \"RE:\" without an earlier conversation. Scams: prizes, gift cards, inheritances, dating approaches, miracle health or bargain products. Cold sales pitches from strangers: web design, SEO, apps, loans, directory listings, wholesale. Strong signs: a known brand's name with an unrelated address, odd or look-alike characters, a failing SPF, DKIM or DMARC check in the Authentication-Results header. A passing check proves nothing: spammers sign their own domains."],
+  ["jev_finance", "no", "Anything that is not about a specific payment."],
+  ["jev_security", "no", "Marketing or newsletters that only mention security."],
+];
+
+// Bring saved recipes up to date with the library where the user kept the default text. true if anything changed.
+function updateRecipes(recipes) {
+  let changed = false;
+  for (const [key, field, old] of LIBRARY_UPDATES) {
+    const r = recipes.find((r) => r.key === key);
+    if (r?.[field] === old) (r[field] = RECIPE_LIBRARY.find((l) => l.key === key)[field]), (changed = true);
+  }
+  return changed;
+}
 
 const DEFAULTS = {
   apiKey: "",
@@ -303,9 +336,21 @@ const loadUsage = async () => (await messenger.storage.local.get({ usage: null }
 
 const loadSettings = () => messenger.storage.local.get(DEFAULTS);
 
+// "Log in to PayPal → evil.example": what a link says, next to the host it really goes to. One entry per host, in order.
+// Links without a host (relative, mailto:, javascript:) are left out. Hosts come out in punycode, so look-alikes show.
+function linkHosts(anchors) {
+  const seen = new Set();
+  return anchors.flatMap(({ href, text }) => {
+    let host = "";
+    try { host = new URL(href).hostname; } catch {}
+    if (!host || seen.has(host)) return [];
+    seen.add(host);
+    return [`${text.replace(/\s+/g, " ").trim().slice(0, 80)} → ${host}`.trim()];
+  }).slice(0, MAX_LINKS);
+}
+
 // Visible text of an HTML body: without CSS and scripts, which textContent would otherwise keep.
-function htmlText(html) {
-  const doc = new DOMParser().parseFromString(html, "text/html");
+function htmlText(doc) {
   doc.querySelectorAll("style, script, noscript, template").forEach((e) => e.remove());
   return doc.body.textContent;
 }
@@ -315,7 +360,12 @@ async function emailState(id, bodyChars) {
   const parts = await messenger.messages.listInlineTextParts(id);
   const plain = parts.find((p) => p.contentType === "text/plain");
   const html = parts.find((p) => p.contentType === "text/html");
-  const body = plain ? plain.content : html ? htmlText(html.content) : "";
+  // Links come from the HTML part even when the plain part is the body: that's where the sender can hide where they go.
+  const doc = html && new DOMParser().parseFromString(html.content, "text/html");
+  const links = doc ? linkHosts([...doc.querySelectorAll("a[href]")].map((a) => ({ href: a.getAttribute("href"), text: a.textContent }))) : [];
+  const body = plain ? plain.content : doc ? htmlText(doc) : "";
+  const attachments = (await messenger.messages.listAttachments(id)).slice(0, MAX_ATTACHMENTS)
+    .map((a) => `${a.name ?? ""} (${a.contentType})`.slice(0, 200));
   const identity = m.folder ? await messenger.identities.getDefault(m.folder.accountId) : null;
   // Only the topmost header: your own mail server adds it, lower ones can be forged by the sender.
   const { headers } = await messenger.messages.getFull(id);
@@ -327,7 +377,8 @@ async function emailState(id, bodyChars) {
     me: identity?.email ?? "",
     email: {
       from: cut(m.author), to: cutList(m.recipients), cc: cutList(m.ccList), subject: cut(m.subject), body: cleanBody(body, bodyChars),
-      headers: { "Authentication-Results": header("authentication-results"), "List-Unsubscribe": header("list-unsubscribe") },
+      links, attachments,
+      headers: { "Authentication-Results": header("authentication-results"), "List-Unsubscribe": header("list-unsubscribe"), "Reply-To": header("reply-to") },
     },
   };
 }
@@ -468,5 +519,5 @@ async function* iterate(list) {
 }
 
 if (typeof module !== "undefined") {
-  module.exports = { DEFAULTS, RECIPE_LIBRARY, cleanBody, questionFor, questionsFor, decide, certainty, dmarcPass, plan, addExample, draftRecipe, parseBackup, askJev, resolveFolder, applyRecipes, knownSender, emailState, authServId, trustedServer, addUsage, budgetLeft, money, syncTags, colorFor, activeScheme, PALETTE };
+  module.exports = { DEFAULTS, RECIPE_LIBRARY, cleanBody, linkHosts, updateRecipes, questionFor, questionsFor, decide, certainty, dmarcPass, plan, addExample, draftRecipe, parseBackup, askJev, resolveFolder, applyRecipes, knownSender, emailState, authServId, trustedServer, addUsage, budgetLeft, money, syncTags, colorFor, activeScheme, PALETTE };
 }

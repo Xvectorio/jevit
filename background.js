@@ -154,7 +154,12 @@ messenger.messages.onNewMailReceived.addListener(async (folder, list) => {
   if ((await loadSettings()).autoTriage) await triageList(list);
 });
 
-messenger.runtime.onInstalled.addListener(({ reason }) => reason === "install" && messenger.runtime.openOptionsPage());
+messenger.runtime.onInstalled.addListener(async ({ reason }) => {
+  if (reason === "install") return messenger.runtime.openOptionsPage();
+  // Only saved recipes need it: without any, the current defaults are used.
+  const { recipes } = await messenger.storage.local.get("recipes");
+  if (reason === "update" && recipes && updateRecipes(recipes)) await messenger.storage.local.set({ recipes });
+});
 messenger.browserAction.onClicked.addListener(() => {
   if (!running) return messenger.runtime.openOptionsPage();
   stop = true;

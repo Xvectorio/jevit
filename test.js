@@ -1,11 +1,33 @@
 // node test.js  (set TYPESAFE_API_KEY to also run the default recipes against Jev)
 const assert = require("node:assert");
-const { DEFAULTS, RECIPE_LIBRARY, cleanBody, questionFor, questionsFor, decide, certainty, dmarcPass, plan, addExample, draftRecipe, parseBackup, askJev, resolveFolder, applyRecipes, knownSender, emailState, authServId, trustedServer, addUsage, budgetLeft, money, syncTags, colorFor, activeScheme, PALETTE } = require("./jev.js");
+const { DEFAULTS, RECIPE_LIBRARY, cleanBody, linkHosts, updateRecipes, questionFor, questionsFor, decide, certainty, dmarcPass, plan, addExample, draftRecipe, parseBackup, askJev, resolveFolder, applyRecipes, knownSender, emailState, authServId, trustedServer, addUsage, budgetLeft, money, syncTags, colorFor, activeScheme, PALETTE } = require("./jev.js");
 
 assert.equal(cleanBody("Hi\n> old quote\n\n\n\n  Bye  "), "Hi\n\nBye");
 assert.equal(cleanBody("x".repeat(9000)).length, 3000);
 assert.equal(cleanBody("x".repeat(9000), 500).length, 500);
 assert.equal(cleanBody("Deal\u200B\u034F ends: https://t.example.com/c/abc?u=1 (or <https://shop.example/x>)"), "Deal ends: t.example.com (or <shop.example>)");
+
+// Link hosts: one per host, text next to where it really goes; no host, no entry; capped.
+assert.deepEqual(linkHosts([
+  { href: "https://evil.example/login?id=1", text: " Log in to\n  PayPal " },
+  { href: "https://evil.example/other", text: "Unsubscribe" },
+  { href: "https://раураl.com/", text: "paypal.com" },
+  { href: "/relative", text: "x" }, { href: "mailto:a@b.c", text: "mail" }, { href: "javascript:void(0)", text: "js" }, { href: "http://[bad", text: "bad" },
+  { href: "https://cdn.example/i.png", text: "" },
+]), ["Log in to PayPal → evil.example", "paypal.com → xn--l-7sba6dbr.com", "→ cdn.example"]);
+assert.equal(linkHosts(Array.from({ length: 30 }, (_, i) => ({ href: `https://h${i}.example`, text: "" }))).length, 10);
+
+// Library updates reach saved recipes only where the user kept the old default text.
+const saved = [
+  { key: "jev_security", no: "Marketing or newsletters that only mention security.", threshold: 0.5, examples: [{ label: true }] },
+  { key: "jev_finance", no: "Anything that is not about a specific payment!" },
+];
+assert.equal(updateRecipes(saved), true);
+assert.equal(saved[0].no, RECIPE_LIBRARY.find((r) => r.key === "jev_security").no);
+assert.deepEqual([saved[0].threshold, saved[0].examples.length], [0.5, 1], "only the text changes");
+assert.equal(saved[1].no, "Anything that is not about a specific payment!", "an edited text is kept");
+assert.equal(updateRecipes(saved), false, "nothing left to update");
+assert.equal(updateRecipes(structuredClone(DEFAULTS.recipes)), false, "current defaults are up to date");
 
 const keys = RECIPE_LIBRARY.map((r) => r.key);
 assert.equal(new Set(keys).size, keys.length, "library keys must be unique");
@@ -216,11 +238,13 @@ global.messenger = { folders: {
     messages: {
       get: async () => ({ author: "a".repeat(5000), subject: "s".repeat(5000), recipients: Array(5000).fill("x".repeat(2000)), ccList: undefined }),
       listInlineTextParts: async () => [{ contentType: "text/plain", content: "Hi" }],
-      getFull: async () => ({ headers: {} }),
+      listAttachments: async () => Array(50).fill({ name: "n".repeat(5000), contentType: "application/pdf" }),
+      getFull: async () => ({ headers: { "reply-to": ["r".repeat(5000)] } }),
     },
   };
   const big = (await emailState(1, 3000)).email;
   assert.deepEqual([big.from.length, big.subject.length, big.to.length, big.to[0].length, big.cc], [1000, 1000, 20, 1000, []]);
+  assert.deepEqual([big.attachments.length, big.attachments[0].length, big.headers["Reply-To"].length, big.links], [10, 200, 1000, []]);
   console.log("logic ok");
 })();
 
