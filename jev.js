@@ -447,7 +447,7 @@ async function classify(id, settings) {
   const keys = decide(settings.recipes, answers, known);
   // A recipe that can't match this sender can't be unsure about it either.
   const open = settings.recipes.filter((r) => !(known && r.skipKnown));
-  return { state, answers, known, keys, ...certainty(open, answers, keys, settings) };
+  return { state, answers, known, keys, paid: !!response, ...certainty(open, answers, keys, settings) };
 }
 
 // Was this mail's topmost Authentication-Results header written by the account's own mail server? A server that
