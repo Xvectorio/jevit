@@ -131,8 +131,14 @@
         <li>in one of your local address books. This includes <b>Collected Addresses</b>, where Thunderbird normally keeps everyone you've written to.</li>
         <li>a recipient of an email in one of your <b>Sent</b> folders.</li>
       </ul>
+      <p>A From address is easy to fake, so a sender only counts as known when your mail server's <b>DMARC</b> check passed for that sender's domain.
+        JevIt reads this from the Authentication-Results header your mail server adds (Gmail, Outlook and most providers do).
+        Mail that fails DMARC, or has no DMARC result, is judged by Jev like any other mail.</p>
+      <p>A sender can add a fake Authentication-Results header of their own, so JevIt only trusts the one written by your mail server.
+        It finds that server per account by reading the header on up to 5 recent Inbox mails, inside Thunderbird, and checks again weekly.
+        The manager shows it under <b>“Never tag mail from people I know as Spam”</b>. If it says <i>none found</i>, your mail server doesn't add the header, and no sender counts as known.</p>
       <p>Your own addresses never count as known, because spam often fakes them. The check runs inside Thunderbird, and your contacts are never sent anywhere.
-        Online (LDAP) address books aren't searched. A spammer who fakes a contact's address will get through: that's the trade-off.</p>
+        Online (LDAP) address books aren't searched.</p>
       <p>The header popup shows “you know this sender: not tagged” when this applies. You can still tick the recipe by hand.</p>
     </section>
 
@@ -232,7 +238,7 @@
         <dt>A recipe matches too much or too little</dt>
         <dd>Adjust the threshold, sharpen the yes/no descriptions, or teach it with “This is / This is not”.</dd>
         <dt>Mail from a contact still gets tagged as spam</dt>
-        <dd>Check that “Never match mail from people I know” is ticked for the Spam recipe, and that the exact sender address is in an address book.</dd>
+        <dd>Check that “Never match mail from people I know” is ticked for the Spam recipe, that the exact sender address is in an address book, that the mail passed DMARC (View → Headers → All shows it in the Authentication-Results header), and that the manager shows a trusted mail server for that account. Some senders don't set up DMARC; teach Jev with “This is not Spam” instead.</dd>
         <dt>More details</dt>
         <dd>Tools → Developer Tools → Debug Add-ons → JevIt → <b>Inspect</b> shows the error console with JevIt's messages.</dd>
       </dl>

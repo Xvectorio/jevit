@@ -18,7 +18,7 @@ Unofficial; not affiliated with TypeSafe.
 - Progress on the toolbar button while triaging. Click the button to stop a long run.
 - A Triaged tag on every mail Jev has judged, and tag colours for both light and dark themes.
 - Move matches to one folder, or to a folder of the same name in each account (such as each account's own Junk).
-- Mail from your contacts, or from people you've written to, is never tagged as Spam. This is checked locally.
+- Mail from your contacts, or from people you've written to, is never tagged as Spam, when your mail server's DMARC check confirms the sender. This is checked locally.
 - Exclude accounts: mail in them is never sent to Jev.
 - Usage and a monthly budget (default $1) so costs stay in check.
 - Export and import recipes as a JSON backup.

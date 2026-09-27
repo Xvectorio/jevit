@@ -1,6 +1,6 @@
 // node test.js  (set TYPESAFE_API_KEY to also run the default recipes against Jev)
 const assert = require("node:assert");
-const { DEFAULTS, RECIPE_LIBRARY, cleanBody, questionFor, questionsFor, decide, plan, addExample, draftRecipe, parseBackup, askJev, resolveFolder, applyRecipes, knownSender, addUsage, budgetLeft, money, syncTags, colorFor, activeScheme, PALETTE } = require("./jev.js");
+const { DEFAULTS, RECIPE_LIBRARY, cleanBody, questionFor, questionsFor, decide, dmarcPass, plan, addExample, draftRecipe, parseBackup, askJev, resolveFolder, applyRecipes, knownSender, emailState, authServId, trustedServer, addUsage, budgetLeft, money, syncTags, colorFor, activeScheme, PALETTE } = require("./jev.js");
 
 assert.equal(cleanBody("Hi\n> old quote\n\n\n\n  Bye  "), "Hi\n\nBye");
 assert.equal(cleanBody("x".repeat(9000)).length, 3000);
@@ -38,6 +38,16 @@ assert.deepEqual([money(0.00021), money(1.5), money(0)], ["$0.00021", "$1.50", "
 
 // Known sender: Spam (skipKnown by default) can't match, other recipes still can.
 assert.deepEqual(decide(rs, { jev_spam: { noul: 0.99 }, jev_urgent: { noul: 0.9 } }, true), ["jev_urgent"]);
+// A sender only counts as known with a DMARC pass for the From address's own domain.
+const ar = "mx.google.com; dkim=pass header.i=@corp.nl; spf=pass smtp.mailfrom=corp.nl; dmarc=pass (p=REJECT sp=REJECT dis=NONE) header.from=corp.nl";
+assert.equal(dmarcPass(ar, "Boss <Boss@Corp.nl>"), true);
+assert.equal(dmarcPass(ar.replace("dmarc=pass", "dmarc=fail"), "Boss <boss@corp.nl>"), false, "DMARC failed");
+assert.equal(dmarcPass("mx.example; spf=pass smtp.mailfrom=corp.nl", "boss@corp.nl"), false, "no DMARC result");
+assert.equal(dmarcPass(undefined, "boss@corp.nl"), false, "no Authentication-Results header");
+assert.equal(dmarcPass(ar, "boss@other.nl"), false, "pass was for another domain");
+assert.equal(dmarcPass(ar.replaceAll("corp.nl", "evil.test"), `"<boss@corp.nl>" <x@evil.test>`), true, "the pass is for the real sender x@evil.test, not the display name");
+assert.equal(dmarcPass(ar, `"<x@evil.test>" <boss@corp.nl>`), true);
+assert.equal(dmarcPass(ar, `"<boss@corp.nl>" <x@evil.test>`), false, "display name can't borrow a contact's DMARC pass");
 
 // Actions: flags merge; only the most probable move wins; a move without a folder is ignored.
 const acts = [
@@ -73,6 +83,8 @@ assert.equal(junk.action, "tag");
 assert.equal(junk.color, "#E6E6E6");
 assert.equal(junk.evil, undefined);
 assert.deepEqual(junk.examples, [{ from: "", subject: "", snippet: "s".repeat(300), label: false }]);
+const [big] = parseBackup(JSON.stringify([{ key: "jev_x", question: "Q?", examples: [{ label: true, from: "f".repeat(5000), subject: "s".repeat(5000) }] }]));
+assert.deepEqual([big.examples[0].from.length, big.examples[0].subject.length], [1000, 1000], "imported examples are capped");
 assert.throws(() => parseBackup('{"recipes":[{"key":"Bad Key","question":"Q?"}]}'), /Invalid recipe/);
 assert.throws(() => parseBackup("{}"), /No recipes/);
 assert.throws(() => parseBackup("not json"));
@@ -143,6 +155,51 @@ global.messenger = { folders: {
   assert.equal(await knownSender("a@b.com"), false, "substring of a contact's address is not a match");
   assert.equal(await knownSender("Me <me@example.com>"), false, "own address never counts");
   assert.equal(await knownSender("stranger@spam.biz"), false);
+  assert.equal(await knownSender(`"<friend@x.org>" <stranger@spam.biz>`), false, "display name can't pose as a contact");
+  assert.equal(await knownSender("<client@corp.nl, stranger@spam.biz>"), false, "no address lists");
+  assert.equal(await knownSender("friend@x.org <stranger@spam.biz>"), false);
+
+  // Authentication-Results is only trusted from the server on most of the account's recent Inbox mail.
+  assert.equal(authServId("mx.google.com; dkim=pass header.i=@x.com"), "mx.google.com");
+  assert.equal(authServId("MX.Example.COM 1; spf=pass"), "mx.example.com", "optional version number");
+  assert.equal(authServId("spf=pass (sender IP is 1.2.3.4) smtp.mailfrom=x.com; dmarc=pass header.from=x.com"), "", "Microsoft: no authserv-id");
+  const inboxWith = (headers) => {
+    const store = {};
+    global.messenger = {
+      storage: { local: { get: async (k) => ({ [k]: store[k] }), set: async (o) => Object.assign(store, o) } },
+      folders: { query: async () => [{ id: "a:/INBOX" }] },
+      messages: {
+        query: async () => ({ messages: headers.map((h, id) => ({ id })) }),
+        getFull: async (id) => ({ headers: headers[id] === null ? {} : { "authentication-results": [headers[id]] } }),
+      },
+    };
+    return store;
+  };
+  const g = "mx.google.com; dmarc=pass header.from=x.com";
+  const cache = inboxWith([...Array(8).fill(g), "evil.test; dmarc=pass", null, null]);
+  assert.equal(await trustedServer("a"), "mx.google.com");
+  assert.equal(cache.authServers.a.id, "mx.google.com", "cached");
+  cache.authServers.a.id = "cached.example";
+  assert.equal(await trustedServer("a"), "cached.example", "cache used within a week");
+  inboxWith([g, g, g, "evil.test; dmarc=pass", "evil.test; dmarc=pass"]);
+  assert.equal(await trustedServer("a"), "mx.google.com", "3 of 5 is a majority");
+  inboxWith([g, g]);
+  assert.equal(await trustedServer("a"), null, "fewer than 3 mails: not enough to trust");
+  inboxWith([...Array(6).fill(null), ...Array(5).fill("evil.test; dmarc=pass")]);
+  assert.equal(await trustedServer("a"), null, "server adds no header: the most common is 'none', nothing trusted");
+  inboxWith(Array(6).fill("spf=pass; dmarc=pass header.from=x.com"));
+  assert.equal(await trustedServer("a"), "", "Microsoft's nameless header can be the trusted one");
+
+  // A sender can't inflate the request: sender, subject and each address are capped, and To/Cc to 20 addresses.
+  global.messenger = {
+    messages: {
+      get: async () => ({ author: "a".repeat(5000), subject: "s".repeat(5000), recipients: Array(5000).fill("x".repeat(2000)), ccList: undefined }),
+      listInlineTextParts: async () => [{ contentType: "text/plain", content: "Hi" }],
+      getFull: async () => ({ headers: {} }),
+    },
+  };
+  const big = (await emailState(1, 3000)).email;
+  assert.deepEqual([big.from.length, big.subject.length, big.to.length, big.to[0].length, big.cc], [1000, 1000, 20, 1000, []]);
   console.log("logic ok");
 })();
 

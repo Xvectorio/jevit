@@ -53,6 +53,7 @@ function render() {
   const spam = s.recipes.find((r) => r.key === SPAM_KEY);
   $("#spamKnownRow").hidden = !spam;
   $("#spamKnown").checked = !!spam?.skipKnown;
+  showAuthServers();
   $("#budget").value = s.budget;
   $("#pricePerMtok").value = s.pricePerMtok;
   $("#bodyChars").value = s.bodyChars;
@@ -175,6 +176,15 @@ $("#consent").onchange = async (e) => {
   await messenger.storage.local.set({ consent: e.target.checked });
   if (e.target.checked && !$("#apiKey").value.trim()) $("#apiKey").focus();
 };
+
+// Each account's mail server whose DMARC verdict JevIt trusts; detected when a known sender is first checked.
+async function showAuthServers() {
+  const { authServers = {} } = await messenger.storage.local.get("authServers");
+  const name = (id) => (id === null ? "none found, so no sender counts as known" : id || "Microsoft (unnamed)");
+  const found = Object.entries(accounts).filter(([id]) => id in authServers).map(([id, account]) => `${account}: ${name(authServers[id].id)}`);
+  $("#authServers").textContent = `Trusted mail server: ${found.length ? found.join(" · ") : "detected on the first triage"}`;
+  $("#authServers").hidden = $("#spamKnownRow").hidden;
+}
 
 // This month's and all-time usage, against the budget currently in the form.
 async function showUsage() {
@@ -327,6 +337,7 @@ async function loadFolders() {
   messenger.storage.onChanged.addListener((changes) => {
     if (changes.draft?.newValue) takeDraft();
     if (changes.usage) showUsage();
+    if (changes.authServers) showAuthServers();
     // Examples taught from the popup or context menu while this page is open; keep them so Save doesn't drop them.
     if (changes.recipes?.newValue) {
       read();

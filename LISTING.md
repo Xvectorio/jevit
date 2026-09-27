@@ -22,7 +22,7 @@ JevIt sorts your mail with **recipes**. A recipe is one plain-language yes/no qu
 - Exclude accounts: mail in an excluded account is never sent to Jev.
 - Export and import recipes as a JSON backup.
 - Usage and budget: see requests, tokens and estimated cost per month, and set a monthly spending limit (default $1).
-- Spam protection for people you know: mail from your contacts, or from people you've sent mail to, is never tagged as Spam (a per-recipe option). It's checked locally.
+- Spam protection for people you know: mail from your contacts, or from people you've sent mail to, is never tagged as Spam, when your mail server's DMARC check confirms the sender (a per-recipe option). It's checked locally.
 
 **Requirements**
 - A TypeSafe API key (https://typesafe.ai). Usage is billed to your TypeSafe account by TypeSafe.
@@ -54,7 +54,7 @@ JevIt is a Thunderbird add-on that classifies email with TypeSafe's Jev model. T
 
 Triage happens only for new mail if you turned on automatic triage, or for mail you select or open and triage yourself. Mail in accounts you exclude in the manager is never sent. The request is authenticated with your own TypeSafe API key. TypeSafe processes this data under its own terms and privacy policy (https://docs.typesafe.ai/legal). According to TypeSafe, requests are not used to train its models.
 
-**Known senders.** For recipes set to "Never match mail from people I know" (Spam by default), JevIt checks locally whether the sender is in one of your local address books, or is a recipient of mail in your Sent folders. It needs Thunderbird's address book permission for this. The lookup happens inside Thunderbird, and your contacts and sent mail are never sent to TypeSafe or anyone else.
+**Known senders.** For recipes set to "Never match mail from people I know" (Spam by default), JevIt checks locally whether the sender is in one of your local address books, or is a recipient of mail in your Sent folders. This only counts when the Authentication-Results header from your mail server shows a DMARC pass for the sender's domain, so a faked sender address isn't trusted. To know which Authentication-Results header is your mail server's, JevIt reads that header on up to 5 recent Inbox mails per account, weekly. It needs Thunderbird's address book permission for this. The lookup happens inside Thunderbird, and your contacts and sent mail are never sent to TypeSafe or anyone else.
 
 **What stays on your computer.** Your API key, your recipes and learned examples, your usage counters (requests, tokens, estimated cost) and your settings are stored only in Thunderbird's local extension storage. Exported backups are files you save yourself. They contain recipes and examples, but not your API key.
 

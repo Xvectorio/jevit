@@ -1,6 +1,7 @@
 // Shared triage logic for background, popup and options pages (plain script, no bundler).
 const JEV_API = "https://api.typesafe.ai/v1/systemone";
-const HEADER_CHARS = 1000; // per header, so a sender can't inflate the request
+const HEADER_CHARS = 1000; // per header (and per address, subject, sender), so a sender can't inflate the request
+const MAX_RECIPIENTS = 20; // To and Cc each; enough to tell a personal mail from a mass mailing
 const MAX_EXAMPLES = 20; // per recipe, newest kept; examples ride along in every request (~100 tokens each)
 
 // A recipe is one yes/no question to Jev. A match always tags the mail; `action` adds one more step.
@@ -147,8 +148,27 @@ function decide(recipes, answers, known = false) {
   return recipes.filter((r) => answers[r.key]?.noul >= r.threshold && !(known && r.skipKnown)).map((r) => r.key);
 }
 
-// "Name <x@y.z>" -> "x@y.z"
-const senderEmail = (author = "") => (author.match(/<([^>]+)>/)?.[1] ?? author).trim().toLowerCase();
+// "Name <x@y.z>" -> "x@y.z". The address is the <…> at the end: the display name before it is free text and can
+// hold a fake "<boss@corp.nl>". Anything that isn't one plain address gives "".
+const senderEmail = (author = "") => {
+  const email = (author.match(/<([^<>]*)>\s*$/)?.[1] ?? author).trim().toLowerCase();
+  return /[\s,;<>"]/.test(email) ? "" : email;
+};
+
+// Did your mail server's DMARC check pass for the sender's own domain? A From address can be faked; a DMARC pass
+// for that same domain can't. `authResults` is the topmost Authentication-Results header.
+const dmarcPass = (authResults = "", author = "") => {
+  const domain = senderEmail(author).split("@")[1];
+  return !!domain && authResults.toLowerCase().split(";")
+    .some((c) => /^\s*dmarc=pass\b/.test(c) && c.match(/\bheader\.from=([^\s;()]+)/)?.[1] === domain);
+};
+
+// Who wrote an Authentication-Results header: its authserv-id, the first token ("mx.google.com; dkim=pass …").
+// Microsoft leaves it out ("spf=pass …; dmarc=pass …"), which gives "".
+const authServId = (header = "") => {
+  const first = header.split(";")[0].trim().toLowerCase();
+  return first.includes("=") ? "" : first.split(/\s/)[0];
+};
 
 // Every email address in a contact's fields (plain fields and vCard text alike), lowercased.
 const emailsIn = (contact) =>
@@ -216,7 +236,7 @@ function parseBackup(text) {
       skipKnown: r.skipKnown === true,
       examples: (Array.isArray(r.examples) ? r.examples : [])
         .filter((e) => typeof e?.label === "boolean")
-        .map((e) => ({ from: str(e.from), subject: str(e.subject), snippet: str(e.snippet).slice(0, 300), label: e.label }))
+        .map((e) => ({ from: str(e.from).slice(0, HEADER_CHARS), subject: str(e.subject).slice(0, HEADER_CHARS), snippet: str(e.snippet).slice(0, 300), label: e.label }))
         .slice(-MAX_EXAMPLES),
     };
   });
@@ -281,10 +301,13 @@ async function emailState(id, bodyChars) {
   // Only the topmost header: your own mail server adds it, lower ones can be forged by the sender.
   const { headers } = await messenger.messages.getFull(id);
   const header = (name) => headers[name]?.[0]?.slice(0, HEADER_CHARS);
+  // Everything the sender writes is capped: this ends up in every request, and in examples that ride along in later ones.
+  const cut = (text = "") => text.slice(0, HEADER_CHARS);
+  const cutList = (list = []) => list.slice(0, MAX_RECIPIENTS).map(cut);
   return {
     me: identity?.email ?? "",
     email: {
-      from: m.author, to: m.recipients, cc: m.ccList, subject: m.subject, body: cleanBody(body, bodyChars),
+      from: cut(m.author), to: cutList(m.recipients), cc: cutList(m.ccList), subject: cut(m.subject), body: cleanBody(body, bodyChars),
       headers: { "Authentication-Results": header("authentication-results"), "List-Unsubscribe": header("list-unsubscribe") },
     },
   };
@@ -303,14 +326,48 @@ async function classify(id, settings) {
   const [response, known] = await Promise.all([
     askJev(settings, state, questionsFor(settings.recipes)),
     // A failing lookup must not fail the triage: the Jev request is already paid for. Treat as unknown.
-    settings.recipes.some((r) => r.skipKnown)
-      ? knownSender(state.email.from).catch((e) => (console.warn("JevIt: known-sender check failed", e), false))
+    // Without a DMARC pass from your own mail server the From address may be faked, so the sender doesn't count as known.
+    settings.recipes.some((r) => r.skipKnown) && dmarcPass(state.email.headers["Authentication-Results"], state.email.from)
+      ? trustedHeader(id, state.email.headers["Authentication-Results"])
+        .then((trusted) => trusted && knownSender(state.email.from))
+        .catch((e) => (console.warn("JevIt: known-sender check failed", e), false))
       : false,
   ]);
   // ponytail: read-modify-write; a popup and a background batch finishing at the same moment can drop one count
   const usage = addUsage(await loadUsage(), month, response.usage?.input_tokens ?? 0, settings.pricePerMtok);
   await messenger.storage.local.set({ usage });
   return { state, answers: response.answers, known, keys: decide(settings.recipes, response.answers, known) };
+}
+
+// Was this mail's topmost Authentication-Results header written by the account's own mail server? A server that
+// doesn't add one leaves the sender's (possibly forged) header on top.
+async function trustedHeader(id, header) {
+  const { folder } = await messenger.messages.get(id);
+  return !!folder && authServId(header) === (await trustedServer(folder.accountId));
+}
+
+// The account's own mail server, as the authserv-id on most of its recent Inbox mail: a sender can forge the header
+// on their own mail, not on most of yours. null without a clear winner, e.g. when the server adds no header at all.
+// Checked locally, cached per account for a week in `authServers` (the manager shows it).
+const AUTH_SAMPLE = 5;
+async function trustedServer(accountId) {
+  const { authServers = {} } = await messenger.storage.local.get("authServers");
+  const cached = authServers[accountId];
+  if (cached && Date.now() - cached.at < 7 * 864e5) return cached.id;
+  const inbox = (await messenger.folders.query({ accountId, specialUse: ["inbox"] })).map((f) => f.id);
+  const found = inbox.length ? await messenger.messages.query({ folderId: inbox, fromDate: new Date(Date.now() - 90 * 864e5), messagesPerPage: AUTH_SAMPLE }) : [];
+  const counts = new Map();
+  let sampled = 0;
+  for (const m of (found.messages ?? found).slice(0, AUTH_SAMPLE)) {
+    const header = (await messenger.messages.getFull(m.id)).headers["authentication-results"]?.[0];
+    const key = header === undefined ? null : authServId(header);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+    sampled++;
+  }
+  const [best, n = 0] = [...counts].sort((a, b) => b[1] - a[1])[0] ?? [];
+  const id = best != null && n >= 3 && n > sampled / 2 ? best : null;
+  await messenger.storage.local.set({ authServers: { ...authServers, [accountId]: { id, at: Date.now() } } });
+  return id;
 }
 
 // Is the sender someone you know: in a local address book (including Collected Addresses), or a recipient
@@ -387,5 +444,5 @@ async function* iterate(list) {
 }
 
 if (typeof module !== "undefined") {
-  module.exports = { DEFAULTS, RECIPE_LIBRARY, cleanBody, questionFor, questionsFor, decide, plan, addExample, draftRecipe, parseBackup, askJev, resolveFolder, applyRecipes, knownSender, addUsage, budgetLeft, money, syncTags, colorFor, activeScheme, PALETTE };
+  module.exports = { DEFAULTS, RECIPE_LIBRARY, cleanBody, questionFor, questionsFor, decide, dmarcPass, plan, addExample, draftRecipe, parseBackup, askJev, resolveFolder, applyRecipes, knownSender, emailState, authServId, trustedServer, addUsage, budgetLeft, money, syncTags, colorFor, activeScheme, PALETTE };
 }

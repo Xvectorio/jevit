@@ -39,8 +39,9 @@
       </div>
       <label class="check" title="Triage every new email in your inboxes and normal folders as it arrives. Mail that Thunderbird moves to Junk is not seen."><input type="checkbox" id="autoTriage"> Automatically run recipes on new mail</label>
       <label class="check" title="When you triage selected mail, emails that already have the Triaged tag are skipped, so you don't pay for them twice. Untick to judge them again, for example after changing a recipe. The header popup always asks Jev."><input type="checkbox" id="skipTriaged"> Skip already triaged mail</label>
-      <div id="excludedAccounts" title="Mail in these accounts is never sent to Jev: not by automatic triage, selected-mail triage or the header popup."></div>
-      <label class="check" id="spamKnownRow" title="Mail from people in your local address books, or people you've sent mail to, never gets the Spam tag. Checked inside Thunderbird; your contacts are never sent anywhere."><input type="checkbox" id="spamKnown"> Never tag mail from people I know as Spam (senders in my address books, or people I've sent mail to)</label>
+      <div id="excludedAccounts" title="Mail in these accounts is never sent to Jev: not by automatic triage, selected-mail triage or the header popup, and never kept as a learned example. Teaching Jev with it only sets the tag."></div>
+      <label class="check" id="spamKnownRow" title="Mail from people in your local address books, or people you've sent mail to, never gets the Spam tag, if your mail server confirms the sender with a DMARC pass. Checked inside Thunderbird; your contacts are never sent anywhere."><input type="checkbox" id="spamKnown"> Never tag mail from people I know as Spam (senders in my address books, or people I've sent mail to)</label>
+      <p class="hint" id="authServers" title="A sender only counts as known when this server's DMARC check passed. JevIt finds it from the Authentication-Results header on your recent Inbox mail, inside Thunderbird."></p>
       <div class="grid2">
         <label title="Which colour set JevIt's tags use: for a dark or a light Thunderbird theme.">Tag colours
           <select id="colorScheme">
@@ -130,7 +131,7 @@
             <button type="button" class="cancel">Cancel</button>
           </div>
         </div>
-        <label class="check" title="Checked inside Thunderbird: contacts in local address books and recipients of your sent mail. Your own addresses never count."><input type="checkbox" name="skipKnown"> Never match mail from people I know: in my address books, or people I've sent mail to</label>
+        <label class="check" title="Checked inside Thunderbird: contacts in local address books and recipients of your sent mail. Only counts when your mail server's DMARC check passed for the sender's domain, so a faked address doesn't get through. Your own addresses never count."><input type="checkbox" name="skipKnown"> Never match mail from people I know: in my address books, or people I've sent mail to</label>
         <details class="examples"><summary></summary><ul></ul></details>
         <div class="toolbar">
           <button type="button" class="clear" title="Remove all learned examples of this recipe. Takes effect when you Save.">Forget examples</button>

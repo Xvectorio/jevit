@@ -27,7 +27,8 @@ async function triageList(list, manual) {
         excluded++;
         continue;
       }
-      if (s.skipTriaged && m.tags.includes(TRIAGED.key)) {
+      // Only for mail you pick: new mail can't have been triaged yet, so a Triaged tag on it didn't come from JevIt.
+      if (manual && s.skipTriaged && m.tags.includes(TRIAGED.key)) {
         skipped++;
         continue;
       }
@@ -57,13 +58,14 @@ async function triageList(list, manual) {
 }
 
 // Selected mails become a yes/no example for one recipe, and its tag (plus action on yes) is applied.
+// Mail from an excluded account is only tagged: examples ride along in every request to Jev.
 async function teach(list, key, yes) {
   const s = await loadSettings();
   const r = s.recipes.find((r) => r.key === key);
   if (!r) return console.warn(`JevIt: no recipe with tag key ${key}`);
   await syncTags(s);
   for await (const m of iterate(list)) {
-    addExample(r, (await emailState(m.id)).email, yes);
+    if (!s.excludedAccounts.includes(m.folder?.accountId)) addExample(r, (await emailState(m.id)).email, yes);
     await applyRecipes(m.id, [r], yes ? [key] : [], {});
   }
   await messenger.storage.local.set({ recipes: s.recipes });
@@ -71,8 +73,10 @@ async function teach(list, key, yes) {
 
 // Hand the selected mails to the manager page, which opens a new unsaved recipe with them as yes examples.
 async function newRecipeFrom(list) {
+  const { excludedAccounts } = await loadSettings();
   const draft = [];
-  for await (const m of iterate(list)) draft.push((await emailState(m.id)).email);
+  for await (const m of iterate(list)) if (!excludedAccounts.includes(m.folder?.accountId)) draft.push((await emailState(m.id)).email);
+  if (!draft.length) return notify("Can't make a recipe from mail in accounts excluded in the JevIt manager: its examples would be sent to Jev.", true);
   await messenger.storage.local.set({ draft });
   messenger.runtime.openOptionsPage();
 }
