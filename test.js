@@ -170,7 +170,7 @@ global.messenger = { folders: {
   assert.equal(activeScheme({ colorScheme: "auto" }), "dark", "no theme info (Node): dark");
   const calls = [];
   messenger.messages.tags = {
-    list: async () => [{ key: "jev_spam", tag: "Spam", color: "#FFD6D6" }, { key: "jev_reply", tag: "Needs reply", color: "#A15912" }],
+    list: async () => [{ key: "jev_spam", tag: "Spam", color: "#FF6B6B" }, { key: "jev_reply", tag: "Needs reply", color: "#A15912" }],
     create: async (...a) => calls.push(["create", ...a]),
     update: async (key, p) => calls.push(["update", key, p.color]),
   };

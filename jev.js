@@ -25,8 +25,9 @@ const UNSURE = { key: "jev_unsure", name: "Unsure", color: "#FFC857", colorLight
 // Tag colours as [dark theme, light theme]. Thunderbird colours the message row text with the tag colour,
 // so each recipe has two. Dark set: one hue each at the same pale lightness (HSL h/100%/92%), a hint of
 // colour on a dark background (12-16:1 contrast). Light set: the same hues, darkened to >= 5.2:1 on white.
+// Spam is the exception: plainly red on both (6.2:1 on dark), so it stands out.
 const PALETTE = {
-  jev_spam: ["#FFD6D6", "#D31717"],
+  jev_spam: ["#FF6B6B", "#D31717"],
   jev_reply: ["#FFEBD6", "#A15912"],
   jev_shipping: ["#FFF5D6", "#85680F"],
   jev_personal: ["#EEFFD6", "#4B770D"],
