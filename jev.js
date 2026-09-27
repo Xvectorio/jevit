@@ -101,6 +101,7 @@ const DEFAULTS = {
   model: "jev-latest",
   autoTriage: false,
   skipTriaged: true, // triaging selected mail skips mail that already has the Triaged tag
+  excludedAccounts: [], // account ids whose mail is never sent to Jev
   colorScheme: "auto", // tag colour set: "auto" follows Thunderbird's theme, or "light" / "dark"
   triagedColor: "#DFDDD9", // warm light grey on dark themes
   triagedColorLight: "#403A47", // dark plum grey on light themes

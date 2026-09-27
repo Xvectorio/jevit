@@ -17,12 +17,16 @@ async function triageList(list, manual) {
     : "";
   if (missing) return notify(`Can't triage with Jev: ${missing}. Click here to open the JevIt manager.`, manual);
   await syncTags(s);
-  let failed = 0, skipped = 0, firstError, halted;
+  let failed = 0, skipped = 0, excluded = 0, firstError, halted;
   running++;
   try {
     // ponytail: one message at a time; parallelize if big batches feel slow (limit: 1200 req/min)
     for await (const m of iterate(list)) {
       if (stop) break;
+      if (s.excludedAccounts.includes(m.folder?.accountId)) {
+        excluded++;
+        continue;
+      }
       if (s.skipTriaged && m.tags.includes(TRIAGED.key)) {
         skipped++;
         continue;
@@ -47,6 +51,7 @@ async function triageList(list, manual) {
     showBudgetBadge().catch(console.error);
   }
   if (manual && skipped) notify(`Skipped ${skipped} mail(s) that were already triaged. To judge them again, untick “Skip already triaged mail” in the JevIt manager.`, true);
+  if (manual && excluded) notify(`Skipped ${excluded} mail(s) from accounts excluded in the JevIt manager.`, true);
   if (halted) notify(`Jev triage stopped: ${halted.message}`, manual, halted.message);
   if (failed) notify(`Jev triage failed for ${failed} mail(s): ${firstError.message}`, manual, firstError.message.split(":")[0]);
 }

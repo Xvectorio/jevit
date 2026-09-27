@@ -2,7 +2,7 @@ const $ = (s) => document.querySelector(s);
 const SPAM_KEY = "jev_spam"; // the Connection switch "Never tag … as Spam" mirrors this recipe's skipKnown
 const FIELDS = ["name", "key", "color", "colorLight", "question", "yes", "no", "action", "folder"];
 const options = (select, entries) => select.replaceChildren(...entries.map(([value, text]) => new Option(text, value)));
-let s, folders, parents, defaultAccount, sharedNames;
+let s, folders, parents, defaultAccount, sharedNames, accounts;
 // Recipe keys whose card / example list is expanded, kept across render().
 const openRecipes = new Set();
 const openExamples = new Set();
@@ -18,6 +18,7 @@ function read() {
   s.model = $("#model").value.trim() || DEFAULTS.model;
   s.autoTriage = $("#autoTriage").checked;
   s.skipTriaged = $("#skipTriaged").checked;
+  s.excludedAccounts = [...document.querySelectorAll("#excludedAccounts input:checked")].map((c) => c.value);
   s.triagedColor = $("#triagedColor").value;
   s.triagedColorLight = $("#triagedColorLight").value;
   s.colorScheme = $("#colorScheme").value;
@@ -38,6 +39,14 @@ function render() {
   $("#model").value = s.model;
   $("#autoTriage").checked = s.autoTriage;
   $("#skipTriaged").checked = s.skipTriaged;
+  $("#excludedAccounts").replaceChildren(...Object.entries(accounts).map(([id, name]) => {
+    const label = document.createElement("label");
+    label.className = "check";
+    label.innerHTML = `<input type="checkbox"> Never send mail from <b></b> to Jev`;
+    label.querySelector("b").textContent = name;
+    Object.assign(label.querySelector("input"), { value: id, checked: s.excludedAccounts.includes(id) });
+    return label;
+  }));
   $("#triagedColor").value = s.triagedColor;
   $("#triagedColorLight").value = s.triagedColorLight;
   $("#colorScheme").value = s.colorScheme;
@@ -297,7 +306,7 @@ $("#help").onclick = (e) => {
 
 // Move targets, and where new folders can go (account top levels first). Labels read "Account/path".
 async function loadFolders() {
-  const accounts = Object.fromEntries((await messenger.accounts.list(false)).map((a) => [a.id, a.name]));
+  accounts = Object.fromEntries((await messenger.accounts.list(false)).map((a) => [a.id, a.name]));
   const labelled = (list) => list
     .map((f) => ({ id: f.id, accountId: f.accountId, path: f.path, name: f.name, label: f.path === "/" ? `${accounts[f.accountId]} (top level)` : `${accounts[f.accountId]}${f.path}` }))
     .sort((a, b) => a.label.localeCompare(b.label));

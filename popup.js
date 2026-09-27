@@ -12,6 +12,7 @@ $("#help").onclick = () => messenger.tabs.create({ url: "help.html" });
   const shown = await messenger.messageDisplay.getDisplayedMessages(tab.id);
   const msg = (shown.messages ?? shown)[0];
   if (!msg) return status("No message displayed.");
+  if (settings.excludedAccounts.includes(msg.folder?.accountId)) return status("This account is excluded from JevIt under “Manage recipes…”.");
   msgId = msg.id;
   status("Asking Jev…");
   try {
