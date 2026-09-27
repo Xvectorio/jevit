@@ -95,8 +95,8 @@ const DEFAULTS = {
   model: "jev-latest",
   autoTriage: false,
   colorScheme: "auto", // tag colour set: "auto" follows Thunderbird's theme, or "light" / "dark"
-  triagedColor: "#FFFFFF",
-  triagedColorLight: "#1F1F1F",
+  triagedColor: "#DFDDD9", // warm light grey on dark themes
+  triagedColorLight: "#403A47", // dark plum grey on light themes
   budget: 1, // USD per calendar month; 0 = no limit
   pricePerMtok: 0.042, // USD per million input tokens (jev-1.13; output tokens are free)
   recipes: RECIPE_LIBRARY.slice(0, 5),

@@ -120,10 +120,10 @@ global.messenger = { folders: {
   };
   const settings = { ...DEFAULTS, recipes: rs.slice(0, 2), colorScheme: "light" };
   await syncTags(settings);
-  assert.deepEqual(calls, [["update", "jev_spam", "#D31717"], ["create", "jev_triaged", "Triaged", "#1F1F1F"]], "reply already right; spam recoloured; triaged created");
+  assert.deepEqual(calls, [["update", "jev_spam", "#D31717"], ["create", "jev_triaged", "Triaged", "#403A47"]], "reply already right; spam recoloured; triaged created");
   calls.length = 0;
   await syncTags({ ...settings, colorScheme: "dark" });
-  assert.deepEqual(calls, [["update", "jev_reply", "#FFEBD6"], ["create", "jev_triaged", "Triaged", "#FFFFFF"]]);
+  assert.deepEqual(calls, [["update", "jev_reply", "#FFEBD6"], ["create", "jev_triaged", "Triaged", "#DFDDD9"]]);
 
   // Known senders: exact address in a contact, or a recipient in Sent; never your own address.
   global.messenger = {
