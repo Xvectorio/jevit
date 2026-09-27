@@ -62,7 +62,7 @@ Triage happens only for new mail if you turned on automatic triage, or for mail 
 
 **Known senders.** For recipes set to "Never match mail from people I know" (Spam by default), JevIt checks locally whether the sender is in one of your local address books, or is a recipient of mail in your Sent folders. This only counts when the Authentication-Results header from your mail server shows a DMARC pass for the sender's domain, so a faked sender address isn't trusted. To know which Authentication-Results header is your mail server's, JevIt reads that header on up to 5 recent Inbox mails per account, weekly. It needs Thunderbird's address book permission for this. The lookup happens inside Thunderbird, and your contacts and sent mail are never sent to TypeSafe or anyone else.
 
-**What stays on your computer.** Your API key, your recipes and learned examples, your usage counters (requests, tokens, estimated cost) and your settings are stored only in Thunderbird's local extension storage. Exported backups are files you save yourself. They contain recipes and examples, but not your API key.
+**What stays on your computer.** Your API key, your recipes and learned examples, your usage counters (requests, tokens, estimated cost), Jev's scores for mail it has judged (numbers, keyed by a fingerprint of the email, not its content, and removed after 90 days) and your settings are stored only in Thunderbird's local extension storage. Exported backups are files you save yourself. They contain recipes and examples, but not your API key.
 
 **What the author receives.** Nothing. JevIt has no analytics, telemetry, tracking or server of its own, and it sends no data to the author or to anyone other than TypeSafe.
 

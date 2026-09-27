@@ -179,6 +179,37 @@ function questionsFor(recipes) {
   return Object.fromEntries(recipes.map((r) => [r.key, questionFor(r)]));
 }
 
+// Jev's scores are kept locally, so judging an email again is free: the header popup, or triaging mail again after
+// changing a threshold. A score belongs to the exact email Jev saw and the exact question (model, recipe question,
+// criteria and examples): editing or teaching a recipe makes its old scores stale. Keyed by a hash of the email,
+// not its Message-ID: the sender picks that, and could borrow the scores of mail you trust.
+// Kept for SCORE_DAYS after Jev was last asked about the email (reuse doesn't extend it); pruneScores() runs at startup.
+const SCORE_DAYS = 90;
+const digest = async (value) => {
+  const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(value)));
+  return [...new Uint8Array(bytes).slice(0, 16)].map((b) => b.toString(16).padStart(2, "0")).join("");
+};
+const scoreKey = async (state) => `score:${await digest(state)}`;
+const questionSigs = (recipes, model) => Promise.all(recipes.map((r) => digest([model, questionFor(r)])));
+
+// Answers from stored scores, and the recipes Jev still has to be asked. `sigs` from questionSigs(recipes).
+function reuse(recipes, sigs, stored = {}) {
+  const answers = {}, missing = [];
+  recipes.forEach((r, i) => (Object.hasOwn(stored, sigs[i]) ? (answers[r.key] = { noul: stored[sigs[i]] }) : missing.push(r)));
+  return { answers, missing };
+}
+
+// The scores to store for an email: one per current recipe, so stale ones are dropped.
+const remember = (recipes, sigs, answers) =>
+  Object.fromEntries(recipes.flatMap((r, i) => (typeof answers[r.key]?.noul === "number" ? [[sigs[i], answers[r.key].noul]] : [])));
+
+// Remove stored scores older than SCORE_DAYS. Entries without a time count as old.
+async function pruneScores(now = Date.now()) {
+  const all = await messenger.storage.local.get(null);
+  const old = Object.keys(all).filter((k) => k.startsWith("score:") && !(now - all[k]?.at < SCORE_DAYS * 864e5));
+  if (old.length) await messenger.storage.local.remove(old);
+}
+
 // Recipe keys whose yes-probability clears that recipe's threshold. A recipe set to skip known senders
 // never matches mail from someone you know, whatever Jev says.
 function decide(recipes, answers, known = false) {
@@ -388,13 +419,17 @@ async function classify(id, settings) {
   // Their errors have cause "halt": the rest of a batch would fail the same way.
   const { consent, budget } = await messenger.storage.local.get({ consent: DEFAULTS.consent, budget: DEFAULTS.budget });
   if (!consent) throw new Error("Allow sending mail to TypeSafe first (JevIt manager, top of the page).", { cause: "halt" });
+  const state = await emailState(id, settings.bodyChars);
+  const key = await scoreKey(state);
+  const [sigs, stored] = await Promise.all([questionSigs(settings.recipes, settings.model), messenger.storage.local.get(key).then((o) => o[key])]);
+  const { answers: kept, missing } = reuse(settings.recipes, sigs, stored);
+  // Only a request costs money: stored scores are reused even when the budget is used up.
   const month = monthOf();
-  if (budgetLeft({ budget }, await loadUsage(), month) <= 0) {
+  if (missing.length && budgetLeft({ budget }, await loadUsage(), month) <= 0) {
     throw new Error(`Monthly Jev budget of ${money(budget)} reached. Raise it in the JevIt manager, or wait for next month.`, { cause: "halt" });
   }
-  const state = await emailState(id, settings.bodyChars);
   const [response, known] = await Promise.all([
-    askJev(settings, state, questionsFor(settings.recipes)),
+    missing.length ? askJev(settings, state, questionsFor(missing)) : null,
     // A failing lookup must not fail the triage: the Jev request is already paid for. Treat as unknown.
     // Without a DMARC pass from your own mail server the From address may be faked, so the sender doesn't count as known.
     settings.recipes.some((r) => r.skipKnown) && dmarcPass(state.email.headers["Authentication-Results"], state.email.from)
@@ -403,12 +438,16 @@ async function classify(id, settings) {
         .catch((e) => (console.warn("JevIt: known-sender check failed", e), false))
       : false,
   ]);
-  // ponytail: serial() only covers this page; a popup and a background batch finishing at the same moment can drop one count
-  await serial(async () => messenger.storage.local.set({ usage: addUsage(await loadUsage(), month, response.usage?.input_tokens ?? 0, settings.pricePerMtok) }));
-  const keys = decide(settings.recipes, response.answers, known);
+  const answers = { ...kept, ...response?.answers };
+  if (response) {
+    // ponytail: serial() only covers this page; a popup and a background batch finishing at the same moment can drop one count
+    await serial(async () => messenger.storage.local.set({ usage: addUsage(await loadUsage(), month, response.usage?.input_tokens ?? 0, settings.pricePerMtok) }));
+    await messenger.storage.local.set({ [key]: { ...remember(settings.recipes, sigs, answers), at: Date.now() } });
+  }
+  const keys = decide(settings.recipes, answers, known);
   // A recipe that can't match this sender can't be unsure about it either.
   const open = settings.recipes.filter((r) => !(known && r.skipKnown));
-  return { state, answers: response.answers, known, keys, ...certainty(open, response.answers, keys, settings) };
+  return { state, answers, known, keys, ...certainty(open, answers, keys, settings) };
 }
 
 // Was this mail's topmost Authentication-Results header written by the account's own mail server? A server that
@@ -519,5 +558,5 @@ async function* iterate(list) {
 }
 
 if (typeof module !== "undefined") {
-  module.exports = { DEFAULTS, RECIPE_LIBRARY, cleanBody, linkHosts, updateRecipes, questionFor, questionsFor, decide, certainty, dmarcPass, plan, addExample, draftRecipe, parseBackup, askJev, resolveFolder, applyRecipes, knownSender, emailState, authServId, trustedServer, addUsage, budgetLeft, money, syncTags, colorFor, activeScheme, PALETTE };
+  module.exports = { DEFAULTS, RECIPE_LIBRARY, cleanBody, linkHosts, updateRecipes, questionFor, questionsFor, reuse, remember, classify, pruneScores, decide, certainty, dmarcPass, plan, addExample, draftRecipe, parseBackup, askJev, resolveFolder, applyRecipes, knownSender, emailState, authServId, trustedServer, addUsage, budgetLeft, money, syncTags, colorFor, activeScheme, PALETTE };
 }

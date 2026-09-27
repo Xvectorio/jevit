@@ -1,6 +1,6 @@
 // node test.js  (set TYPESAFE_API_KEY to also run the default recipes against Jev)
 const assert = require("node:assert");
-const { DEFAULTS, RECIPE_LIBRARY, cleanBody, linkHosts, updateRecipes, questionFor, questionsFor, decide, certainty, dmarcPass, plan, addExample, draftRecipe, parseBackup, askJev, resolveFolder, applyRecipes, knownSender, emailState, authServId, trustedServer, addUsage, budgetLeft, money, syncTags, colorFor, activeScheme, PALETTE } = require("./jev.js");
+const { DEFAULTS, RECIPE_LIBRARY, cleanBody, linkHosts, updateRecipes, questionFor, questionsFor, reuse, remember, classify, pruneScores, decide, certainty, dmarcPass, plan, addExample, draftRecipe, parseBackup, askJev, resolveFolder, applyRecipes, knownSender, emailState, authServId, trustedServer, addUsage, budgetLeft, money, syncTags, colorFor, activeScheme, PALETTE } = require("./jev.js");
 
 assert.equal(cleanBody("Hi\n> old quote\n\n\n\n  Bye  "), "Hi\n\nBye");
 assert.equal(cleanBody("x".repeat(9000)).length, 3000);
@@ -245,6 +245,49 @@ global.messenger = { folders: {
   const big = (await emailState(1, 3000)).email;
   assert.deepEqual([big.from.length, big.subject.length, big.to.length, big.to[0].length, big.cc], [1000, 1000, 20, 1000, []]);
   assert.deepEqual([big.attachments.length, big.attachments[0].length, big.headers["Reply-To"].length, big.links], [10, 200, 1000, []]);
+
+  // Stored scores: asking again is free; only recipes whose question changed (edited, taught) go to Jev again.
+  const local = { consent: true, budget: 1 };
+  let body = "Claim your prize", asked = [];
+  global.fetch = async (url, { body: req }) => {
+    const { questions } = JSON.parse(req);
+    asked.push(Object.keys(questions));
+    return { ok: true, json: async () => ({ answers: Object.fromEntries(Object.keys(questions).map((k) => [k, { noul: 0.95 }])), usage: { input_tokens: 1000 } }) };
+  };
+  global.messenger = {
+    storage: { local: {
+      get: async (k) => (typeof k === "string" ? { [k]: local[k] } : Object.fromEntries(Object.entries(k).map(([key, d]) => [key, local[key] ?? d]))),
+      set: async (o) => Object.assign(local, o),
+    } },
+    messages: {
+      get: async () => ({ author: "x@spam.biz", subject: "Win", recipients: [], ccList: [] }),
+      listInlineTextParts: async () => [{ contentType: "text/plain", content: body }],
+      listAttachments: async () => [],
+      getFull: async () => ({ headers: {} }),
+    },
+  };
+  const s2 = { ...DEFAULTS, apiKey: "k", recipes: structuredClone(rs.slice(0, 2)) };
+  const first = await classify(1, s2);
+  assert.deepEqual([asked, first.keys, local.usage.requests], [[["jev_spam", "jev_reply"]], ["jev_spam", "jev_reply"], 1]);
+  const again = await classify(1, s2);
+  assert.deepEqual([asked.length, again.answers, local.usage.requests], [1, first.answers, 1], "second time: stored scores, no request");
+  addExample(s2.recipes[0], email, true);
+  await classify(1, s2);
+  assert.deepEqual(asked[1], ["jev_spam"], "a taught recipe is asked again, the other reused");
+  local.budget = 0.00001;
+  assert.deepEqual((await classify(1, s2)).keys, ["jev_spam", "jev_reply"], "stored scores still work when the budget is used up");
+  body = "Claim your prize now";
+  await assert.rejects(classify(1, s2), /budget/, "a changed email can't use another's scores");
+  assert.equal(Object.keys(local).filter((k) => k.startsWith("score:")).length, 1);
+  const [scored] = Object.keys(local).filter((k) => k.startsWith("score:"));
+  assert.ok(Date.now() - local[scored].at < 1000, "stored with the time Jev was asked");
+  Object.assign(local, { "score:old": { at: Date.now() - 91 * 864e5, x: 1 }, "score:notime": { x: 1 } });
+  messenger.storage.local.get = async (k) => (k === null ? { ...local } : assert.fail("get(null) only"));
+  messenger.storage.local.remove = async (keys) => keys.forEach((k) => delete local[k]);
+  await pruneScores();
+  assert.deepEqual(Object.keys(local).filter((k) => k.startsWith("score:")), [scored], "old and undated scores removed, recent kept");
+  assert.deepEqual(reuse(rs.slice(0, 2), ["a", "b"], { b: 0.4, c: 1 }), { answers: { jev_reply: { noul: 0.4 } }, missing: [rs[0]] });
+  assert.deepEqual(remember(rs.slice(0, 2), ["a", "b"], { jev_spam: { noul: 0.9 } }), { a: 0.9 }, "only recipes with an answer");
   console.log("logic ok");
 })();
 

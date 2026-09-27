@@ -23,6 +23,7 @@ Unofficial; not affiliated with TypeSafe.
 - Move matches to one folder, or to a folder of the same name in each account (such as each account's own Junk).
 - Mail from your contacts, or from people you've written to, is never tagged as Spam, when your mail server's DMARC check confirms the sender. This is checked locally.
 - Exclude accounts: mail in them is never sent to Jev.
+- Jev's scores are remembered locally: the header popup, and triaging mail again after changing a threshold, cost nothing. Only edited or taught recipes are asked again.
 - Usage and a monthly budget (default $1) so costs stay in check.
 - Export and import recipes as a JSON backup.
 

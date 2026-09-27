@@ -13,8 +13,7 @@ async function triageList(list, manual) {
   const s = await loadSettings();
   const missing = !s.apiKey ? "no TypeSafe API key is set"
     : !s.consent ? "sending mail to TypeSafe is not allowed yet"
-    : budgetLeft(s, await loadUsage(), monthOf()) <= 0 ? `this month's budget of ${money(s.budget)} is used up`
-    : "";
+    : ""; // a used-up budget halts in classify(), once a mail needs a request: stored scores are still free
   if (missing) return notify(`Can't triage with Jev: ${missing}. Click here to open the JevIt manager.`, manual);
   await syncTags(s);
   let failed = 0, skipped = 0, excluded = 0, firstError, halted;
@@ -149,6 +148,7 @@ matchMedia("(prefers-color-scheme: dark)").addEventListener("change", resyncTags
 buildMenus();
 resyncTags();
 showBudgetBadge().catch(console.error);
+pruneScores().catch((e) => console.error("JevIt: pruning stored scores failed", e));
 
 messenger.messages.onNewMailReceived.addListener(async (folder, list) => {
   if ((await loadSettings()).autoTriage) await triageList(list);
