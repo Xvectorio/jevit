@@ -523,15 +523,20 @@ const activeScheme = (settings) =>
 const colorFor = (r, scheme) => (scheme === "light" ? r.colorLight ?? defaultColors(r.key)[1] : r.color);
 
 // Create missing JevIt tags and give every JevIt tag its name and colour for the active scheme.
+// Thunderbird refuses two tags with one name, so a recipe named like another tag (such as one of your own) gets
+// " (JevIt)" added to its tag's name.
 async function syncTags(settings) {
   const scheme = activeScheme(settings);
   const triaged = { ...TRIAGED, color: settings.triagedColor, colorLight: settings.triagedColorLight };
   const existing = new Map((await messenger.messages.tags.list()).map((t) => [t.key, t]));
   for (const r of [...settings.recipes, triaged, ...(settings.unsureMargin > 0 ? [UNSURE] : [])]) {
     const color = colorFor(r, scheme).toUpperCase();
+    const taken = [...existing.values()].some((t) => t.key !== r.key && t.tag.toLowerCase() === r.name.toLowerCase());
+    const name = taken ? `${r.name} (JevIt)` : r.name;
     const tag = existing.get(r.key);
-    if (!tag) await messenger.messages.tags.create(r.key, r.name, color);
-    else if (tag.tag !== r.name || tag.color?.toUpperCase() !== color) await messenger.messages.tags.update(r.key, { tag: r.name, color });
+    if (!tag) await messenger.messages.tags.create(r.key, name, color);
+    else if (tag.tag !== name || tag.color?.toUpperCase() !== color) await messenger.messages.tags.update(r.key, { tag: name, color });
+    existing.set(r.key, { key: r.key, tag: name, color });
   }
 }
 

@@ -181,6 +181,12 @@ global.messenger = { folders: {
   calls.length = 0;
   await syncTags({ ...settings, colorScheme: "dark", unsureMargin: 0 }); // no Unsure tag when it's turned off
   assert.deepEqual(calls, [["update", "jev_reply", "#FFEBD6"], ["create", "jev_triaged", "Triaged", "#DFDDD9"]]);
+  // A recipe named like one of your own tags: Thunderbird refuses a second "Rental", so JevIt's gets a suffix.
+  calls.length = 0;
+  messenger.messages.tags.list = async () => [{ key: "rental", tag: "Rental", color: "#FF7800" }];
+  const rental = { key: "jev_123", name: "Rental", color: "#FF7800", colorLight: "#FF7800" };
+  await syncTags({ ...settings, recipes: [rental], unsureMargin: 0 });
+  assert.deepEqual(calls[0], ["create", "jev_123", "Rental (JevIt)", "#FF7800"]);
 
   // Known senders: exact address in a contact, or a recipient in Sent; never your own address.
   global.messenger = {

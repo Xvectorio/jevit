@@ -2,10 +2,14 @@
 // Automatic triage runs on every new mail: show each kind of problem once per session, not each time.
 // `reason` groups messages that differ only in details (counts, server replies).
 const notified = new Set();
+let shown = Promise.resolve(); // one notification call at a time, so a fast run's summary can't overtake its start notice
 function notify(message, manual, reason = message) {
   if (!manual && notified.has(reason)) return;
   if (!manual) notified.add(reason);
-  messenger.notifications.create("jevit", { type: "basic", title: "JevIt", message: message.slice(0, 250) });
+  // Some desktops stack notifications with the same id instead of replacing them: clear the old one first.
+  shown = shown.then(() => messenger.notifications.clear("jevit"))
+    .then(() => messenger.notifications.create("jevit", { type: "basic", title: "JevIt", message: message.slice(0, 250) }))
+    .catch(console.error);
 }
 messenger.notifications.onClicked.addListener((id) => id === "jevit" && messenger.runtime.openOptionsPage());
 
@@ -126,7 +130,7 @@ async function buildMenus() {
 messenger.menus.onClicked.addListener((info) => {
   const [what, key] = String(info.menuItemId).split(":");
   const list = info.selectedMessages;
-  if (what === "triage") triageList(list, true);
+  if (what === "triage") triageList(list, true).catch((e) => (console.error("JevIt:", e), notify(`Jev triage failed: ${e.message}`, true)));
   if (what === "yes" || what === "no") teach(list, key, what === "yes").catch(console.error);
   if (what === "new") newRecipeFrom(list).catch(console.error);
   if (what === "help") messenger.tabs.create({ url: "help.html" });
@@ -172,7 +176,7 @@ showBudgetBadge().catch(console.error);
 pruneScores().catch((e) => console.error("JevIt: pruning stored scores failed", e));
 
 messenger.messages.onNewMailReceived.addListener(async (folder, list) => {
-  if ((await loadSettings()).autoTriage) await triageList(list);
+  if ((await loadSettings()).autoTriage) await triageList(list).catch((e) => (console.error("JevIt:", e), notify(`Jev triage failed: ${e.message}`, false)));
 });
 
 messenger.runtime.onInstalled.addListener(async ({ reason }) => {
