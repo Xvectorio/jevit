@@ -321,3 +321,4 @@ async function loadFolders() {
     }
   });
 })();
+$("#version").textContent = `JevIt ${messenger.runtime.getManifest().version}`;
