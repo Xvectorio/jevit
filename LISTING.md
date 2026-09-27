@@ -16,7 +16,7 @@ JevIt sorts your mail with **recipes**. A recipe is one plain-language yes/no qu
 - Write your own recipes, or create one from selected mail ("more like this").
 - Teach Jev: right-click mail → JevIt → "This is …" / "This is not …". The mail becomes an example the recipe learns from. Shortcuts: Alt+Shift+S (spam) and Alt+Shift+D (not spam).
 - Review Jev's scores for the open email in the header popup, then correct and apply them.
-- Triage selected mail from the context menu, or turn on automatic triage for new mail.
+- Triage selected mail from the context menu, or turn on automatic triage for new mail. The toolbar button counts the mails done, and a click stops a long run.
 - Export and import recipes as a JSON backup.
 - Usage and budget: see requests, tokens and estimated cost per month, and set a monthly spending limit (default $1).
 - Spam protection for people you know: mail from your contacts, or from people you've sent mail to, is never tagged as Spam (a per-recipe option). It's checked locally.

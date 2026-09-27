@@ -18,20 +18,29 @@ async function triageList(list, manual) {
   if (missing) return notify(`Can't triage with Jev: ${missing}. Click here to open the JevIt manager.`, manual);
   await syncTags(s);
   let failed = 0, skipped = 0, firstError;
-  // ponytail: one message at a time; parallelize if big batches feel slow (limit: 1200 req/min)
-  for await (const m of iterate(list)) {
-    if (s.skipTriaged && m.tags.includes(TRIAGED.key)) {
-      skipped++;
-      continue;
+  running++;
+  try {
+    // ponytail: one message at a time; parallelize if big batches feel slow (limit: 1200 req/min)
+    for await (const m of iterate(list)) {
+      if (stop) break;
+      if (s.skipTriaged && m.tags.includes(TRIAGED.key)) {
+        skipped++;
+        continue;
+      }
+      try {
+        const { keys, answers } = await classify(m.id, s);
+        await applyRecipes(m.id, s.recipes, keys, answers, true);
+      } catch (e) {
+        failed++;
+        firstError ??= e;
+        console.error("JevIt:", m.subject, e);
+      }
+      done++;
+      showBudgetBadge().catch(console.error);
     }
-    try {
-      const { keys, answers } = await classify(m.id, s);
-      await applyRecipes(m.id, s.recipes, keys, answers, true);
-    } catch (e) {
-      failed++;
-      firstError ??= e;
-      console.error("JevIt:", m.subject, e);
-    }
+  } finally {
+    if (!--running) done = 0, stop = false;
+    showBudgetBadge().catch(console.error);
   }
   if (manual && skipped) notify(`Skipped ${skipped} mail(s) that were already triaged. To judge them again, untick “Skip already triaged mail” in the JevIt manager.`, true);
   if (failed) notify(`Jev triage failed for ${failed} mail(s): ${firstError.message}`, manual, firstError.message.split(":")[0]);
@@ -97,8 +106,14 @@ messenger.commands.onCommand.addListener(async (command, tab) => {
   if (yes !== undefined) teach(await selectedMessages(tab), "jev_spam", yes).catch(console.error);
 });
 
-// A "$" badge on the toolbar button while this month's budget is used up.
+// While triage runs, the toolbar button counts the mails done so far (the total isn't known up front:
+// big selections arrive in pages), and clicking it stops the run. Otherwise it shows "$" while this month's budget is used up.
+let running = 0, done = 0, stop = false;
 async function showBudgetBadge() {
+  if (running) {
+    await messenger.browserAction.setBadgeText({ text: String(done) });
+    return messenger.browserAction.setTitle({ title: `JevIt: triaging… ${done} mail(s) done. Click to stop.` });
+  }
   const s = await loadSettings();
   const out = budgetLeft(s, await loadUsage(), monthOf()) <= 0;
   await messenger.browserAction.setBadgeText({ text: out ? "$" : "" });
@@ -122,4 +137,8 @@ messenger.messages.onNewMailReceived.addListener(async (folder, list) => {
 });
 
 messenger.runtime.onInstalled.addListener(({ reason }) => reason === "install" && messenger.runtime.openOptionsPage());
-messenger.browserAction.onClicked.addListener(() => messenger.runtime.openOptionsPage());
+messenger.browserAction.onClicked.addListener(() => {
+  if (!running) return messenger.runtime.openOptionsPage();
+  stop = true;
+  notify(`Stopped triage after ${done} mail(s). The rest has no Triaged tag, so you can pick it up later.`, true);
+});
