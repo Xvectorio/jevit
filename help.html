@@ -76,7 +76,16 @@
         <dt>Counts as yes / Counts as no</dt>
         <dd>What a yes and a no mean, with boundary cases. Jev reads these literally, so write down what you actually mean.</dd>
         <dt>Threshold</dt>
-        <dd>How sure Jev must be before the recipe matches, from 0 to 1. 0.8 means 80% sure. Raise it for recipes that move or junk mail.</dd>
+        <dd>How sure Jev must be before the recipe matches, from 0 to 1. 0.8 means 80% sure.
+          Choose it by what a wrong answer costs: the more a recipe does to your mail, the surer Jev must be. Good starting points:
+          <ul>
+            <li><b>Tag + star:</b> 0.3–0.5. Better an extra star than a missed request.</li>
+            <li><b>Only tag:</b> 0.5. A wrong tag costs little either way.</li>
+            <li><b>Tag + mark read:</b> 0.7–0.8. A wrong match hides a mail you should have seen.</li>
+            <li><b>Junk or move:</b> 0.9. A real mail moved away is far worse than one spam left in your inbox.</li>
+          </ul>
+          Then check it in the popup on a few mails that should and shouldn't match.
+          If their percentages overlap, no threshold will separate them: sharpen the yes/no descriptions or teach the recipe with “This is / This is not”.</dd>
         <dt>Tag key</dt>
         <dd>The tag's internal name: lowercase letters, digits and <code>_</code>, unique per recipe. If you change it, mail tagged earlier keeps the old tag.</dd>
       </dl>
@@ -220,7 +229,7 @@
         <li><b>One condition per recipe.</b> Two recipes are better than one vague one.</li>
         <li><b>Be literal.</b> Jev answers exactly what you wrote. If you find yourself explaining a wrong answer, add that explanation to the yes/no descriptions.</li>
         <li><b>Don't ask for dates or maths.</b> “Due within 3 days” is unreliable; “says it's urgent or due very soon” works.</li>
-        <li><b>Use the popup to tune thresholds.</b> Look at the percentages on a few typical emails and set the threshold between the yes and no cases.</li>
+        <li><b>Use the popup to tune thresholds.</b> Look at the percentages on a few typical emails and set the threshold between the yes and no cases, towards the safe side for the recipe's action.</li>
         <li><b>Be careful with moves and junk.</b> Start with “Only tag”, and switch to moving once the recipe has proven itself.</li>
         <li><b>English works best.</b> Jev handles other languages, but less accurately. Check the first results.</li>
         <li><b>Pin the model</b> (for example <code>jev-1.13.0</code>) once your thresholds are tuned, so a new Jev version doesn't change results unexpectedly.</li>
