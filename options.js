@@ -25,6 +25,8 @@ function read() {
   s.budget = Number($("#budget").value);
   s.pricePerMtok = Number($("#pricePerMtok").value);
   s.bodyChars = Number($("#bodyChars").value);
+  s.actSure = Number($("#actSure").value);
+  s.unsureMargin = Number($("#unsureMargin").value);
   document.querySelectorAll("#recipes fieldset").forEach((fs, i) => {
     for (const f of FIELDS) s.recipes[i][f] = fs.elements[f].value.trim();
     s.recipes[i].threshold = Number(fs.elements.threshold.value);
@@ -57,6 +59,8 @@ function render() {
   $("#budget").value = s.budget;
   $("#pricePerMtok").value = s.pricePerMtok;
   $("#bodyChars").value = s.bodyChars;
+  $("#actSure").value = s.actSure;
+  $("#unsureMargin").value = s.unsureMargin;
   showUsage();
   $("#recipes").replaceChildren(
     ...s.recipes.map((r, i) => {
@@ -293,6 +297,10 @@ async function save() {
   }
   if (!(Number.isInteger(s.bodyChars) && s.bodyChars >= 0)) {
     $("#status").textContent = "Fix the text limit: a whole number of characters, 0 or more.";
+    return;
+  }
+  if (!(s.actSure >= 0 && s.actSure <= 1) || !(s.unsureMargin >= 0 && s.unsureMargin <= 1)) {
+    $("#status").textContent = "Fix “Act only when Jev is this sure” and the unsure margin: numbers from 0 to 1.";
     return;
   }
   const keys = s.recipes.map((r) => r.key);

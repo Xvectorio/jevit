@@ -1,6 +1,6 @@
 // node test.js  (set TYPESAFE_API_KEY to also run the default recipes against Jev)
 const assert = require("node:assert");
-const { DEFAULTS, RECIPE_LIBRARY, cleanBody, questionFor, questionsFor, decide, dmarcPass, plan, addExample, draftRecipe, parseBackup, askJev, resolveFolder, applyRecipes, knownSender, emailState, authServId, trustedServer, addUsage, budgetLeft, money, syncTags, colorFor, activeScheme, PALETTE } = require("./jev.js");
+const { DEFAULTS, RECIPE_LIBRARY, cleanBody, questionFor, questionsFor, decide, certainty, dmarcPass, plan, addExample, draftRecipe, parseBackup, askJev, resolveFolder, applyRecipes, knownSender, emailState, authServId, trustedServer, addUsage, budgetLeft, money, syncTags, colorFor, activeScheme, PALETTE } = require("./jev.js");
 
 assert.equal(cleanBody("Hi\n> old quote\n\n\n\n  Bye  "), "Hi\n\nBye");
 assert.equal(cleanBody("x".repeat(9000)).length, 3000);
@@ -63,6 +63,16 @@ assert.deepEqual(plan(acts, ["jev_spam", "jev_reply", "jev_newsletter", "jev_fin
 assert.deepEqual(plan(acts, [], ans), { update: {}, folder: null });
 const junkmove = [{ ...rs[0], action: "junkmove", folder: "junk" }];
 assert.deepEqual(plan(junkmove, ["jev_spam"], {}), { update: { junk: true }, folder: "junk" });
+// Certainty: actions wait for actSure; a held-back action or a near miss makes the mail Unsure.
+const sure = { actSure: 0.9, unsureMargin: 0.15 };
+const junker = [{ ...rs[0], action: "junk" }, { ...rs[1], action: "tag" }]; // Spam 0.8, Needs reply 0.6
+assert.deepEqual(certainty(junker, { jev_spam: { noul: 0.95 } }, ["jev_spam"], sure), { act: ["jev_spam"], unsure: false });
+assert.deepEqual(certainty(junker, { jev_spam: { noul: 0.85 } }, ["jev_spam"], sure), { act: [], unsure: true }, "tagged, not junked, flagged for review");
+assert.deepEqual(certainty(junker, { jev_reply: { noul: 0.61 } }, ["jev_reply"], sure), { act: ["jev_reply"], unsure: false }, "tag-only recipes always act");
+assert.equal(certainty(junker, { jev_spam: { noul: 0.7 } }, [], sure).unsure, true, "just under the threshold");
+assert.equal(certainty(junker, { jev_spam: { noul: 0.6 } }, [], sure).unsure, false, "well under it");
+assert.equal(certainty(junker, { jev_spam: { noul: 0.99 } }, [], sure).unsure, false, "over the threshold but not matched (known sender) isn't unsure");
+assert.deepEqual(certainty(junker, { jev_spam: { noul: 0.85 } }, ["jev_spam"]), { act: ["jev_spam"], unsure: false }, "0 = always act, no Unsure tag");
 // "More like this" drafts: named after the sender, unique key, the picked mails as yes examples.
 const free = { from: "Free Mobile <x@free.fr>", subject: "Nouvelle notification sur votre espace client", body: "Bonjour" };
 const d = draftRecipe([free], ["jev_free_mobile"]);
@@ -121,6 +131,14 @@ global.messenger = { folders: {
   msg.tags = updated.tags;
   await applyRecipes(1, [rs[0]], [], {}); // "This is not Spam"
   assert.deepEqual(updated.tags, ["$label1", "jev_reply", "jev_triaged"]);
+  // Unsure: triage tags the match but holds its action back; the user's verdict clears the Unsure tag.
+  const junkRecipe = [{ ...rs[0], action: "junk" }];
+  await applyRecipes(1, junkRecipe, ["jev_spam"], {}, true, { act: [], unsure: true });
+  assert.deepEqual([updated.tags, updated.junk], [["$label1", "jev_reply", "jev_triaged", "jev_spam", "jev_unsure"], undefined]);
+  msg.tags = updated.tags;
+  await applyRecipes(1, junkRecipe, ["jev_spam"], {}); // "This is Spam"
+  assert.deepEqual([updated.tags, updated.junk], [["$label1", "jev_reply", "jev_triaged", "jev_spam"], true]);
+  msg.tags = ["$label1", "jev_reply", "jev_triaged"];
 
   // Tag colours: two sets; syncTags creates missing tags and recolours existing ones for the active set.
   assert.deepEqual([rs[0].color, rs[0].colorLight], PALETTE.jev_spam);
@@ -136,9 +154,10 @@ global.messenger = { folders: {
   };
   const settings = { ...DEFAULTS, recipes: rs.slice(0, 2), colorScheme: "light" };
   await syncTags(settings);
-  assert.deepEqual(calls, [["update", "jev_spam", "#D31717"], ["create", "jev_triaged", "Triaged", "#403A47"]], "reply already right; spam recoloured; triaged created");
+  assert.deepEqual(calls, [["update", "jev_spam", "#D31717"], ["create", "jev_triaged", "Triaged", "#403A47"], ["create", "jev_unsure", "Unsure", "#8A5A00"]],
+    "reply already right; spam recoloured; triaged and unsure created");
   calls.length = 0;
-  await syncTags({ ...settings, colorScheme: "dark" });
+  await syncTags({ ...settings, colorScheme: "dark", unsureMargin: 0 }); // no Unsure tag when it's turned off
   assert.deepEqual(calls, [["update", "jev_reply", "#FFEBD6"], ["create", "jev_triaged", "Triaged", "#DFDDD9"]]);
 
   // Known senders: exact address in a contact, or a recipient in Sent; never your own address.

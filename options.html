@@ -39,6 +39,16 @@
       </div>
       <label class="check" title="Triage every new email in your inboxes and normal folders as it arrives. Mail that Thunderbird moves to Junk is not seen."><input type="checkbox" id="autoTriage"> Automatically run recipes on new mail</label>
       <label class="check" title="When you triage selected mail, emails that already have the Triaged tag are skipped, so you don't pay for them twice. Untick to judge them again, for example after changing a recipe. The header popup always asks Jev."><input type="checkbox" id="skipTriaged"> Skip already triaged mail</label>
+      <div class="grid2">
+        <label title="Star, mark read, mark as junk and move only happen when Jev is at least this sure, from 0 to 1. Below it, a matching recipe only sets its tag, and the mail gets the Unsure tag so you can check it. A wrong tag is easy to spot; a wrong move to Junk hides the mail. Applying from the header popup, or teaching Jev, always runs the actions.">Act only when Jev is this sure
+          <input type="number" id="actSure" min="0" max="1" step="0.05">
+          <span class="hint">Default 0.9. 0 acts on every match.</span>
+        </label>
+        <label title="Mail that scored this close under a recipe's threshold gets the Unsure tag, from 0 to 1. With a threshold of 0.8 and 0.15 here, scores from 0.65 up to 0.8 count as unsure. Look through the Unsure tag now and then, and teach Jev with right-click → JevIt → “This is …” / “This is not …”: those mails teach it the most. Your verdict removes the tag.">Unsure margin under the threshold
+          <input type="number" id="unsureMargin" min="0" max="1" step="0.05">
+          <span class="hint">Default 0.15. 0 turns the Unsure tag off.</span>
+        </label>
+      </div>
       <div id="excludedAccounts" title="Mail in these accounts is never sent to Jev: not by automatic triage, selected-mail triage or the header popup, and never kept as a learned example. Teaching Jev with it only sets the tag."></div>
       <label class="check" id="spamKnownRow" title="Mail from people in your local address books, or people you've sent mail to, never gets the Spam tag, if your mail server confirms the sender with a DMARC pass. Checked inside Thunderbird; your contacts are never sent anywhere."><input type="checkbox" id="spamKnown"> Never tag mail from people I know as Spam (senders in my address books, or people I've sent mail to)</label>
       <p class="hint" id="authServers" title="A sender only counts as known when this server's DMARC check passed. JevIt finds it from the Authentication-Results header on your recent Inbox mail, inside Thunderbird."></p>

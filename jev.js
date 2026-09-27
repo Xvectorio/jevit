@@ -17,6 +17,8 @@ const movesMail = (action) => action === "move" || action === "junkmove";
 // recipe.folder is a folder id, or EVERY_ACCOUNT + name: "the folder with that name in the mail's own account".
 const EVERY_ACCOUNT = "*:";
 const TRIAGED = { key: "jev_triaged", name: "Triaged" }; // tag on every mail Jev has judged; colour is a setting
+// Mail Jev was unsure about, to review and teach from. Amber: 11:1 on a dark background, 5.9:1 on white.
+const UNSURE = { key: "jev_unsure", name: "Unsure", color: "#FFC857", colorLight: "#8A5A00" };
 
 // Tag colours as [dark theme, light theme]. Thunderbird colours the message row text with the tag colour,
 // so each recipe has two. Dark set: one hue each at the same pale lightness (HSL h/100%/92%), a hint of
@@ -109,6 +111,8 @@ const DEFAULTS = {
   budget: 1, // USD per calendar month; 0 = no limit
   pricePerMtok: 0.042, // USD per million input tokens (jev-1.13; output tokens are free)
   bodyChars: 3000, // most of the body sent to Jev, after cleanup; the signal is usually near the top
+  actSure: 0.9, // a match below this only tags: star, mark read, junk and move wait until Jev is this sure. 0 = always act
+  unsureMargin: 0.15, // mail this close under a recipe's threshold gets the Unsure tag. 0 = no Unsure tag
   recipes: RECIPE_LIBRARY.slice(0, 5),
 };
 
@@ -146,6 +150,17 @@ function questionsFor(recipes) {
 // never matches mail from someone you know, whatever Jev says.
 function decide(recipes, answers, known = false) {
   return recipes.filter((r) => answers[r.key]?.noul >= r.threshold && !(known && r.skipKnown)).map((r) => r.key);
+}
+
+// How sure Jev was about the matches. A match under `actSure` only tags: a wrong tag is easy to spot, a wrong move
+// to Junk hides the mail. `unsure`: a match held back like that, or a recipe that scored just under its threshold.
+// Those mails are the ones worth teaching Jev from.
+function certainty(recipes, answers, keys, { actSure = 0, unsureMargin = 0 } = {}) {
+  const p = (r) => answers[r.key]?.noul ?? 0;
+  const act = recipes.filter((r) => keys.includes(r.key) && (r.action === "tag" || p(r) >= actSure)).map((r) => r.key);
+  const unsure = unsureMargin > 0 && recipes.some((r) =>
+    keys.includes(r.key) ? !act.includes(r.key) : p(r) < r.threshold && p(r) >= r.threshold - unsureMargin);
+  return { act, unsure };
 }
 
 // "Name <x@y.z>" -> "x@y.z". The address is the <…> at the end: the display name before it is free text and can
@@ -339,7 +354,10 @@ async function classify(id, settings) {
   ]);
   // ponytail: serial() only covers this page; a popup and a background batch finishing at the same moment can drop one count
   await serial(async () => messenger.storage.local.set({ usage: addUsage(await loadUsage(), month, response.usage?.input_tokens ?? 0, settings.pricePerMtok) }));
-  return { state, answers: response.answers, known, keys: decide(settings.recipes, response.answers, known) };
+  const keys = decide(settings.recipes, response.answers, known);
+  // A recipe that can't match this sender can't be unsure about it either.
+  const open = settings.recipes.filter((r) => !(known && r.skipKnown));
+  return { state, answers: response.answers, known, keys, ...certainty(open, response.answers, keys, settings) };
 }
 
 // Was this mail's topmost Authentication-Results header written by the account's own mail server? A server that
@@ -390,14 +408,15 @@ async function knownSender(author) {
   return (found.messages ?? found).length > 0;
 }
 
-// Set this extension's tags (leaving the user's other tags alone), then run the matched recipes' actions.
+// Set this extension's tags (leaving the user's other tags alone), then run the actions of the recipes in `act`.
 // `triaged`: Jev judged this mail, so it also gets the Triaged tag (kept on later re-triage or teaching).
+// `unsure` adds the Unsure tag; any other call removes it, because the user has now judged the mail.
 // Tags must exist first: call syncTags(settings) before a batch.
-async function applyRecipes(id, recipes, keys, answers, triaged = false) {
-  const extra = triaged ? [TRIAGED] : [];
-  const ours = new Set(recipes.map((r) => r.key));
+async function applyRecipes(id, recipes, keys, answers, triaged = false, { act = keys, unsure = false } = {}) {
+  const extra = [...(triaged ? [TRIAGED] : []), ...(unsure ? [UNSURE] : [])];
+  const ours = new Set([...recipes.map((r) => r.key), UNSURE.key]);
   const m = await messenger.messages.get(id);
-  const { update, folder } = plan(recipes, keys, answers);
+  const { update, folder } = plan(recipes, act, answers);
   const tags = new Set([...m.tags.filter((t) => !ours.has(t)), ...keys, ...extra.map((t) => t.key)]);
   await messenger.messages.update(id, { ...update, tags: [...tags] });
   const target = folder && m.folder ? await resolveFolder(folder, m.folder.accountId) : folder;
@@ -418,7 +437,7 @@ async function syncTags(settings) {
   const scheme = activeScheme(settings);
   const triaged = { ...TRIAGED, color: settings.triagedColor, colorLight: settings.triagedColorLight };
   const existing = new Map((await messenger.messages.tags.list()).map((t) => [t.key, t]));
-  for (const r of [...settings.recipes, triaged]) {
+  for (const r of [...settings.recipes, triaged, ...(settings.unsureMargin > 0 ? [UNSURE] : [])]) {
     const color = colorFor(r, scheme).toUpperCase();
     const tag = existing.get(r.key);
     if (!tag) await messenger.messages.tags.create(r.key, r.name, color);
@@ -449,5 +468,5 @@ async function* iterate(list) {
 }
 
 if (typeof module !== "undefined") {
-  module.exports = { DEFAULTS, RECIPE_LIBRARY, cleanBody, questionFor, questionsFor, decide, dmarcPass, plan, addExample, draftRecipe, parseBackup, askJev, resolveFolder, applyRecipes, knownSender, emailState, authServId, trustedServer, addUsage, budgetLeft, money, syncTags, colorFor, activeScheme, PALETTE };
+  module.exports = { DEFAULTS, RECIPE_LIBRARY, cleanBody, questionFor, questionsFor, decide, certainty, dmarcPass, plan, addExample, draftRecipe, parseBackup, askJev, resolveFolder, applyRecipes, knownSender, emailState, authServId, trustedServer, addUsage, budgetLeft, money, syncTags, colorFor, activeScheme, PALETTE };
 }

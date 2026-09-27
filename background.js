@@ -36,8 +36,8 @@ async function triageList(list, manual) {
           continue;
         }
         try {
-          const { keys, answers } = await classify(m.id, s);
-          await applyRecipes(m.id, s.recipes, keys, answers, true);
+          const { keys, answers, act, unsure } = await classify(m.id, s);
+          await applyRecipes(m.id, s.recipes, keys, answers, true, { act, unsure });
         } catch (e) {
           if (e.cause === "halt") {
             halted = e;

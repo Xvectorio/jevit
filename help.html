@@ -24,6 +24,7 @@
         <a href="#known">People you know</a>
         <a href="#tbjunk">Thunderbird's junk filter</a>
         <a href="#triaged">The Triaged tag</a>
+        <a href="#unsure">When Jev is unsure</a>
         <a href="#colours">Tag colours</a>
         <a href="#usage">Usage and budget</a>
         <a href="#backup">Backup</a>
@@ -115,6 +116,8 @@
       </ul>
       <p>An email can only move once. If several moving recipes match, the one Jev is most sure about wins.
         Moving between accounts works, but is slower because Thunderbird copies the email.</p>
+      <p>Star, mark read, mark as junk and move only happen when Jev is at least 90% sure (<b>Act only when Jev is this sure</b> in the Connection section).
+        Below that, a matching recipe only sets its tag, see <a href="#unsure">When Jev is unsure</a>.</p>
     </section>
 
     <section class="card" id="teach">
@@ -171,6 +174,20 @@
       <p>Every email Jev has judged gets a <b>Triaged</b> tag, whether or not any recipe matched. Teaching doesn't add it, and neither does a failed triage.
         Use Thunderbird's quick filter or a saved search on this tag to see what JevIt has processed, or what it hasn't yet.
         You can change its colour in the Connection section.</p>
+    </section>
+
+    <section class="card" id="unsure">
+      <h2>When Jev is unsure</h2>
+      <p>A wrong tag is easy to spot. A wrong move to Junk hides the email. So JevIt is careful when Jev isn't sure:</p>
+      <ul>
+        <li><b>Actions wait for certainty.</b> A recipe that matches with less than 90% certainty only sets its tag. Its star, mark read, junk or move doesn't happen.</li>
+        <li><b>Near misses are flagged.</b> An email that scored just under a recipe's threshold (within 15 percentage points) gets no recipe tag.</li>
+      </ul>
+      <p>Both kinds of email get the amber <b>Unsure</b> tag. Look through that tag now and then, and give your verdict with
+        <b>JevIt → <i>recipe</i> → This is … / This is not …</b>, or in the header popup. Your verdict runs the recipe's action and removes the Unsure tag.
+        These are the emails Jev learns the most from, so the Unsure tag shrinks as you teach it.</p>
+      <p>Change both numbers in the Connection section. <b>Act only when Jev is this sure</b> at 0 acts on every match; <b>Unsure margin</b> at 0 turns the Unsure tag off.
+        Applying from the header popup, and teaching, always run the actions you choose.</p>
     </section>
 
     <section class="card" id="colours">

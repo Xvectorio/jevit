@@ -19,6 +19,7 @@ Unofficial; not affiliated with TypeSafe.
 - Triage selected mail from the context menu, or automatically for new mail. Already triaged mail is skipped by default.
 - Progress on the toolbar button while triaging. Click the button to stop a long run.
 - A Triaged tag on every mail Jev has judged, and tag colours for both light and dark themes.
+- Careful with uncertain mail: star, mark read, junk and move only happen when Jev is at least 90% sure. Below that, and for near misses, mail gets an Unsure tag to review and teach Jev from.
 - Move matches to one folder, or to a folder of the same name in each account (such as each account's own Junk).
 - Mail from your contacts, or from people you've written to, is never tagged as Spam, when your mail server's DMARC check confirms the sender. This is checked locally.
 - Exclude accounts: mail in them is never sent to Jev.
