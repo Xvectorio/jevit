@@ -46,9 +46,14 @@ const recipe = (key, name, threshold, question, yes, no) => {
 const RECIPE_LIBRARY = [
   { ...recipe("jev_spam", "Spam", 0.8,
     "Is `email` unsolicited bulk mail, a scam, or a phishing attempt?",
-    "Unrequested promotion from an unknown sender, fraud, fake invoices, requests for passwords or payment details. " +
-      "A sender that fails SPF, DKIM or DMARC in the Authentication-Results header is a strong sign.",
-    "Mail the recipient signed up for or would expect, or genuine personal or business correspondence."), skipKnown: true },
+    "Phishing: `me`'s mailbox, password, storage, wallet or bank account supposedly needs action, from an address that doesn't belong to that company. " +
+      "Fake business mail: purchase orders, quotes, invoices or payment proofs `me` never asked for, often a \"RE:\" without an earlier conversation. " +
+      "Scams: prizes, gift cards, inheritances, dating approaches, miracle health or bargain products. " +
+      "Cold sales pitches from strangers: web design, SEO, apps, loans, directory listings, wholesale. " +
+      "Strong signs: a known brand's name with an unrelated address, odd or look-alike characters, " +
+      "a failing SPF, DKIM or DMARC check in the Authentication-Results header. A passing check proves nothing: spammers sign their own domains.",
+    "Mail the recipient signed up for or would expect, such as newsletters, shop mail and notifications from services they use, " +
+      "or genuine personal or business correspondence."), skipKnown: true },
   recipe("jev_reply", "Needs reply", 0.6,
     "Does a person in `email` ask the recipient `me` to reply, decide, or do something?",
     "A direct question, request, invitation or deadline written by a person to `me`.",
