@@ -1,5 +1,6 @@
 const $ = (s) => document.querySelector(s);
-const FIELDS = ["name", "key", "color", "question", "yes", "no", "action", "folder"];
+const SPAM_KEY = "jev_spam"; // the Connection switch "Never tag … as Spam" mirrors this recipe's skipKnown
+const FIELDS = ["name", "key", "color", "colorLight", "question", "yes", "no", "action", "folder"];
 const options = (select, entries) => select.replaceChildren(...entries.map(([value, text]) => new Option(text, value)));
 let s, folders, parents, defaultAccount, sharedNames;
 // Recipe keys whose card / example list is expanded, kept across render().
@@ -17,6 +18,8 @@ function read() {
   s.model = $("#model").value.trim() || DEFAULTS.model;
   s.autoTriage = $("#autoTriage").checked;
   s.triagedColor = $("#triagedColor").value;
+  s.triagedColorLight = $("#triagedColorLight").value;
+  s.colorScheme = $("#colorScheme").value;
   s.budget = Number($("#budget").value);
   s.pricePerMtok = Number($("#pricePerMtok").value);
   document.querySelectorAll("#recipes fieldset").forEach((fs, i) => {
@@ -33,6 +36,11 @@ function render() {
   $("#model").value = s.model;
   $("#autoTriage").checked = s.autoTriage;
   $("#triagedColor").value = s.triagedColor;
+  $("#triagedColorLight").value = s.triagedColorLight;
+  $("#colorScheme").value = s.colorScheme;
+  const spam = s.recipes.find((r) => r.key === SPAM_KEY);
+  $("#spamKnownRow").hidden = !spam;
+  $("#spamKnown").checked = !!spam?.skipKnown;
   $("#budget").value = s.budget;
   $("#pricePerMtok").value = s.pricePerMtok;
   showUsage();
@@ -50,6 +58,7 @@ function render() {
         ["new", "New folder…"],
       ]);
       for (const f of FIELDS) fs.elements[f].value = r[f];
+      fs.elements.colorLight.value = colorFor(r, "light"); // recipes saved before light colours existed
       fs.elements.threshold.value = r.threshold;
       fs.elements.skipKnown.checked = !!r.skipKnown;
       keepOpen(card, openRecipes, r.key);
@@ -97,12 +106,14 @@ function render() {
       // One-line summary of the card, kept current while editing.
       const summarize = () => {
         const el = fs.elements;
-        card.querySelector(".dot").style.background = el.color.value;
+        // Half dark-theme colour, half light-theme colour.
+        card.querySelector(".dot").style.background = `linear-gradient(90deg, ${el.color.value} 50%, ${el.colorLight.value} 50%)`;
         card.querySelector(".title").textContent = el.name.value || "(unnamed)";
         card.querySelector(".meta").textContent =
           `${ACTIONS[el.action.value]} · at ${Math.round(Number(el.threshold.value) * 100)}%` +
           `${el.skipKnown.checked ? " · not for known senders" : ""} · ${r.examples.length} example(s)`;
         card.querySelector(".folder").hidden = !movesMail(el.action.value);
+        if (r.key === SPAM_KEY) $("#spamKnown").checked = el.skipKnown.checked;
         nf.hidden = !movesMail(el.action.value) || el.folder.value !== "new";
       };
       fs.oninput = summarize;
@@ -166,13 +177,28 @@ async function showUsage() {
   $("#budgetMeter").value = budget > 0 ? Math.min(current.cost / budget, 1) : 0;
 }
 $("#budget").oninput = showUsage;
+$("#defaultColors").onclick = () => {
+  read();
+  for (const r of s.recipes) if (PALETTE[r.key]) [r.color, r.colorLight] = PALETTE[r.key];
+  s.triagedColor = DEFAULTS.triagedColor;
+  s.triagedColorLight = DEFAULTS.triagedColorLight;
+  render();
+  $("#status").textContent = "Default colours set for built-in recipes and Triaged. Click Save to apply them to your mail.";
+};
+$("#spamKnown").onchange = (e) => {
+  read();
+  const spam = s.recipes.find((r) => r.key === SPAM_KEY);
+  if (spam) spam.skipKnown = e.target.checked;
+  render();
+  $("#status").textContent = "Click Save to keep it.";
+};
 $("#resetUsage").onclick = async () => {
   await messenger.storage.local.remove("usage");
   $("#status").textContent = "Usage counters reset.";
 };
 
 const blankRecipe = () =>
-  ({ ...structuredClone(RECIPE_LIBRARY[0]), key: `jev_${Date.now()}`, name: "New recipe", color: "#808080", question: "Is `email` …?", yes: "", no: "" });
+  ({ ...structuredClone(RECIPE_LIBRARY[0]), key: `jev_${Date.now()}`, name: "New recipe", color: NEW_RECIPE_COLORS[0], colorLight: NEW_RECIPE_COLORS[1], question: "Is `email` …?", yes: "", no: "" });
 
 function addRecipe(r) {
   s.recipes.push(r);
@@ -252,13 +278,14 @@ async function save() {
     return;
   }
   await messenger.storage.local.set(s);
-  const existing = new Set((await messenger.messages.tags.list()).map((t) => t.key));
-  for (const r of [...s.recipes, { ...TRIAGED, color: s.triagedColor }].filter((r) => existing.has(r.key))) {
-    await messenger.messages.tags.update(r.key, { tag: r.name, color: r.color.toUpperCase() });
-  }
+  await syncTags(s);
   $("#status").textContent = "Saved.";
 }
 document.querySelectorAll(".save").forEach((b) => (b.onclick = save));
+$("#help").onclick = (e) => {
+  e.preventDefault();
+  messenger.tabs.create({ url: "help.html" });
+};
 
 // Move targets, and where new folders can go (account top levels first). Labels read "Account/path".
 async function loadFolders() {

@@ -8,6 +8,7 @@
   <header class="savebar">
     <h1><img src="icon.svg" alt="" width="26" height="26"> JevIt <span class="sub">AI mail triage</span></h1>
     <span id="status" role="status"></span>
+    <a href="help.html" class="help-link" id="help">Help</a>
     <button class="save">Save</button>
   </header>
 
@@ -33,7 +34,21 @@
         </label>
       </div>
       <label class="check"><input type="checkbox" id="autoTriage"> Automatically run recipes on new mail</label>
-      <label class="check"><input type="color" id="triagedColor"> Colour of the “Triaged” tag, added to every email Jev has judged</label>
+      <label class="check" id="spamKnownRow"><input type="checkbox" id="spamKnown"> Never tag mail from people I know as Spam (senders in my address books, or people I've sent mail to)</label>
+      <div class="grid2">
+        <label>Tag colours
+          <select id="colorScheme">
+            <option value="auto">Follow Thunderbird's theme</option>
+            <option value="light">Light theme colours</option>
+            <option value="dark">Dark theme colours</option>
+          </select>
+          <span class="hint">Thunderbird has one colour per tag, so JevIt recolours its tags when this or the theme changes.</span>
+        </label>
+        <label>“Triaged” tag colour (dark · light theme)
+          <span class="pair"><input type="color" id="triagedColor" title="Dark theme"><input type="color" id="triagedColorLight" title="Light theme"></span>
+          <span class="hint">Added to every email Jev has judged.</span>
+        </label>
+      </div>
     </section>
 
     <section class="card">
@@ -68,6 +83,7 @@
       <div id="recipes"></div>
       <div class="toolbar">
         <select id="library" aria-label="Add recipe"></select>
+        <button id="defaultColors" title="Built-in recipes and the Triaged tag get their default colours; your own recipes keep theirs">Default colours</button>
         <span class="spacer"></span>
         <button id="export">Export…</button>
         <button id="import">Import…</button>
@@ -86,7 +102,7 @@
         <div class="row">
           <label>Name <input type="text" name="name" required></label>
           <label>Tag key <input type="text" name="key" pattern="[a-z0-9_]+" required spellcheck="false"></label>
-          <label>Color <input type="color" name="color"></label>
+          <label>Colours (dark · light) <span class="pair"><input type="color" name="color" title="Dark theme"><input type="color" name="colorLight" title="Light theme"></span></label>
           <label>Threshold <input type="number" name="threshold" min="0" max="1" step="0.05"></label>
         </div>
         <label>Question <textarea name="question" rows="2"></textarea></label>

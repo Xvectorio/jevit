@@ -108,3 +108,22 @@ meter { width: 120px; }
 /* Usage & budget */
 .usage { display: grid; gap: 6px; margin-bottom: 14px; }
 .usage meter { width: 100%; height: 10px; }
+.pair { display: flex; gap: 6px; }
+
+/* Help page */
+.help main { line-height: 1.55; }
+.help .card p, .help .card li, .help dd { color: var(--text); }
+.help ol, .help ul { padding-left: 20px; margin: 0 0 12px; }
+.help li { margin: 4px 0; }
+.help dl { margin: 0 0 12px; }
+.help dt { font-weight: 600; margin-top: 10px; }
+.help dd { margin: 2px 0 0 0; }
+.help .card { scroll-margin-top: 70px; }
+.toc { display: flex; flex-wrap: wrap; gap: 6px; }
+.toc a { padding: 3px 10px; border: 1px solid var(--border); border-radius: 999px; color: var(--text); text-decoration: none; font-size: 13px; background: var(--field); }
+.toc a:hover { border-color: var(--accent); }
+.help a { color: var(--accent); }
+.keys td { padding: 4px 12px 4px 0; white-space: normal; vertical-align: top; }
+kbd { font: 12px ui-monospace, monospace; padding: 1px 5px; border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 4px; background: var(--field); }
+.savebar .help-link { color: var(--accent); text-decoration: none; font-size: 14px; }
+.help .card > p:first-child { margin-top: 0; }

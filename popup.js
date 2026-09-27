@@ -3,6 +3,7 @@ const status = (text) => ($("#status").textContent = text);
 let settings, result, msgId;
 
 $("#options").onclick = () => messenger.runtime.openOptionsPage();
+$("#help").onclick = () => messenger.tabs.create({ url: "help.html" });
 
 (async () => {
   settings = await loadSettings();
@@ -42,6 +43,7 @@ $("#apply").onclick = async () => {
     for (const r of wrong) addExample(r, result.state.email, checked.includes(r.key));
     if (wrong.length) await messenger.storage.local.set({ recipes: settings.recipes });
   }
-  await applyRecipes(msgId, settings.recipes, checked, result.answers, settings.triagedColor);
+  await syncTags(settings);
+  await applyRecipes(msgId, settings.recipes, checked, result.answers, true);
   window.close();
 };

@@ -1,6 +1,6 @@
 // node test.js  (set TYPESAFE_API_KEY to also run the default recipes against Jev)
 const assert = require("node:assert");
-const { DEFAULTS, RECIPE_LIBRARY, cleanBody, questionFor, questionsFor, decide, plan, addExample, draftRecipe, parseBackup, askJev, resolveFolder, applyRecipes, knownSender, addUsage, budgetLeft, money } = require("./jev.js");
+const { DEFAULTS, RECIPE_LIBRARY, cleanBody, questionFor, questionsFor, decide, plan, addExample, draftRecipe, parseBackup, askJev, resolveFolder, applyRecipes, knownSender, addUsage, budgetLeft, money, syncTags, colorFor, activeScheme, PALETTE } = require("./jev.js");
 
 assert.equal(cleanBody("Hi\n> old quote\n\n\n\n  Bye  "), "Hi\n\nBye");
 assert.equal(cleanBody("x".repeat(9000)).length, 6000);
@@ -68,7 +68,7 @@ const [junk] = parseBackup(JSON.stringify([{ key: "jev_x", question: "Q?", thres
   examples: [{ label: "yes" }, { label: false, subject: 1, snippet: "s".repeat(999) }], evil: true }]));
 assert.equal(junk.threshold, 0.7);
 assert.equal(junk.action, "tag");
-assert.equal(junk.color, "#808080");
+assert.equal(junk.color, "#E6E6E6");
 assert.equal(junk.evil, undefined);
 assert.deepEqual(junk.examples, [{ from: "", subject: "", snippet: "s".repeat(300), label: false }]);
 assert.throws(() => parseBackup('{"recipes":[{"key":"Bad Key","question":"Q?"}]}'), /Invalid recipe/);
@@ -96,17 +96,34 @@ global.messenger = { folders: {
   // Triaged tag: added when Jev judged the mail, kept by later teaching; the user's own tags survive.
   const msg = { id: 1, tags: ["$label1", "jev_spam"], folder: { id: "a:/INBOX", accountId: "a" } };
   let updated;
-  const created = [];
   messenger.messages = {
     get: async () => msg, update: async (id, p) => (updated = p), move: async () => assert.fail("no move expected"),
-    tags: { list: async () => [{ key: "jev_spam" }], create: async (...args) => created.push(args) },
+    tags: { list: async () => assert.fail("applyRecipes must not touch tag definitions") },
   };
-  await applyRecipes(1, rs.slice(0, 2), ["jev_reply"], {}, "#2a9d8f");
+  await applyRecipes(1, rs.slice(0, 2), ["jev_reply"], {}, true);
   assert.deepEqual(updated.tags, ["$label1", "jev_reply", "jev_triaged"]);
-  assert.deepEqual(created.at(-1), ["jev_triaged", "Triaged", "#2A9D8F"]);
   msg.tags = updated.tags;
   await applyRecipes(1, [rs[0]], [], {}); // "This is not Spam"
   assert.deepEqual(updated.tags, ["$label1", "jev_reply", "jev_triaged"]);
+
+  // Tag colours: two sets; syncTags creates missing tags and recolours existing ones for the active set.
+  assert.deepEqual([rs[0].color, rs[0].colorLight], PALETTE.jev_spam);
+  assert.equal(colorFor({ key: "jev_spam", color: "#CC0000" }, "light"), PALETTE.jev_spam[1], "old recipes get the default light colour");
+  assert.equal(colorFor({ key: "jev_mine", color: "#123456" }, "light"), "#595959");
+  assert.equal(activeScheme({ colorScheme: "light" }), "light");
+  assert.equal(activeScheme({ colorScheme: "auto" }), "dark", "no theme info (Node): dark");
+  const calls = [];
+  messenger.messages.tags = {
+    list: async () => [{ key: "jev_spam", tag: "Spam", color: "#FFD6D6" }, { key: "jev_reply", tag: "Needs reply", color: "#A15912" }],
+    create: async (...a) => calls.push(["create", ...a]),
+    update: async (key, p) => calls.push(["update", key, p.color]),
+  };
+  const settings = { ...DEFAULTS, recipes: rs.slice(0, 2), colorScheme: "light" };
+  await syncTags(settings);
+  assert.deepEqual(calls, [["update", "jev_spam", "#D31717"], ["create", "jev_triaged", "Triaged", "#1F1F1F"]], "reply already right; spam recoloured; triaged created");
+  calls.length = 0;
+  await syncTags({ ...settings, colorScheme: "dark" });
+  assert.deepEqual(calls, [["update", "jev_reply", "#FFEBD6"], ["create", "jev_triaged", "Triaged", "#FFFFFF"]]);
 
   // Known senders: exact address in a contact, or a recipient in Sent; never your own address.
   global.messenger = {

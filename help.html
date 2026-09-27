@@ -1,0 +1,218 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JevIt help</title>
+<link rel="icon" href="icon.svg">
+<link rel="stylesheet" href="style.css">
+<body class="manager help">
+  <header class="savebar">
+    <h1><img src="icon.svg" alt="" width="26" height="26"> JevIt <span class="sub">Help</span></h1>
+  </header>
+
+  <main>
+    <section class="card">
+      <p>JevIt sorts your mail with <b>recipes</b>. A recipe is one plain-language yes/no question, such as
+        “Is this an invoice or receipt?”. TypeSafe's <b>Jev</b> model answers it for each email with a probability.
+        When the probability reaches the recipe's threshold, JevIt adds the recipe's tag, and can also star the email,
+        mark it read, mark it as junk, or move it to a folder.</p>
+      <nav class="toc">
+        <a href="#start">Getting started</a>
+        <a href="#triage">Triaging mail</a>
+        <a href="#recipes">Recipes</a>
+        <a href="#actions">Actions and folders</a>
+        <a href="#teach">Teaching Jev</a>
+        <a href="#known">People you know</a>
+        <a href="#triaged">The Triaged tag</a>
+        <a href="#colours">Tag colours</a>
+        <a href="#usage">Usage and budget</a>
+        <a href="#backup">Backup</a>
+        <a href="#keys">Keyboard shortcuts</a>
+        <a href="#privacy">Privacy</a>
+        <a href="#tips">Tips for good recipes</a>
+        <a href="#trouble">Troubleshooting</a>
+      </nav>
+    </section>
+
+    <section class="card" id="start">
+      <h2>Getting started</h2>
+      <ol>
+        <li>Open the manager with the <b>JevIt</b> toolbar button. It also opens by itself after installing.</li>
+        <li>Read <b>Data sent to TypeSafe</b> and tick <b>“JevIt may send the content of emails I triage to TypeSafe”</b>. Nothing is sent before you do.</li>
+        <li>Paste your <b>TypeSafe API key</b> (from typesafe.ai). It is saved when you leave the field.</li>
+        <li>Optional: tick <b>Automatically run recipes on new mail</b>, then click <b>Save</b>.</li>
+        <li>Try it: open an email and click <b>JevIt</b> in the message header to see what Jev thinks.</li>
+      </ol>
+      <p>Five recipes are installed to start with: Spam, Needs reply, Newsletter, Invoice / receipt and Urgent. By default they only add a tag.</p>
+    </section>
+
+    <section class="card" id="triage">
+      <h2>Triaging mail</h2>
+      <dl>
+        <dt>Automatically</dt>
+        <dd>With “Automatically run recipes on new mail” on, every new email in your inboxes and normal folders is triaged as it arrives.</dd>
+        <dt>Selected mail</dt>
+        <dd>Select one or more emails, right-click and choose <b>JevIt → Triage with Jev</b>. To triage a whole folder, press Ctrl+A first. Emails are handled one at a time, so large selections take a while.</dd>
+        <dt>One email, with review</dt>
+        <dd>Open an email and click <b>JevIt</b> in the message header. The popup shows Jev's probability for every recipe and ticks the ones that reach their threshold.
+          Change the ticks if you disagree and click <b>Apply</b>. With “Remember my corrections as examples” on, every tick you changed becomes a learned example.</dd>
+      </dl>
+      <p>Triaging an email again replaces JevIt's tags on it. Your own Thunderbird tags are never touched.
+        Moves, stars, read and junk flags are not undone.</p>
+    </section>
+
+    <section class="card" id="recipes">
+      <h2>Recipes</h2>
+      <p>Recipes are listed in the manager under <b>Recipes</b>. Each one shows as a single line: its colours, name, action, threshold and number of examples. Click it to edit.</p>
+      <dl>
+        <dt>Question</dt>
+        <dd>The yes/no question Jev answers. Refer to the email as <code>`email`</code> and to yourself as <code>`me`</code>,
+          for example: “Does a person in <code>`email`</code> ask <code>`me`</code> to reply?”</dd>
+        <dt>Counts as yes / Counts as no</dt>
+        <dd>What a yes and a no mean, with boundary cases. Jev reads these literally, so write down what you actually mean.</dd>
+        <dt>Threshold</dt>
+        <dd>How sure Jev must be before the recipe matches, from 0 to 1. 0.8 means 80% sure. Raise it for recipes that move or junk mail.</dd>
+        <dt>Tag key</dt>
+        <dd>The tag's internal name: lowercase letters, digits and <code>_</code>, unique per recipe. If you change it, mail tagged earlier keeps the old tag.</dd>
+      </dl>
+      <p><b>Adding recipes.</b> Use <b>Add recipe…</b> under the list. You can choose a blank recipe or a ready-made one:
+        Meeting / event, Shipping, Security alert, Personal, Social or Jobs / recruiting, plus any of the five defaults you removed.</p>
+      <p><b>More like this.</b> Select example emails, right-click and choose <b>JevIt → New recipe from selected mail…</b>.
+        This opens a new recipe named after the sender. Its question is “is this the same kind of mail as these examples?”, with the selected emails as yes-examples.
+        Check the wording and click <b>Save</b>. These recipes depend on their examples, so add a few “This is not …” examples when they match too much.</p>
+      <p>Changes to recipes are kept only after you click <b>Save</b>, either at the top or the bottom of the page.</p>
+    </section>
+
+    <section class="card" id="actions">
+      <h2>Actions and folders</h2>
+      <p>A match always adds the recipe's tag. <b>When it matches</b> can do one more thing:</p>
+      <ul>
+        <li><b>Only tag</b>: nothing else.</li>
+        <li><b>Tag + star</b>, <b>Tag + mark read</b>, or <b>Tag + mark as junk</b>. Mark as junk sets Thunderbird's junk flag.</li>
+        <li><b>Tag + move to folder</b>, or <b>Tag + mark as junk + move to folder</b>.</li>
+      </ul>
+      <p><b>Folder choices:</b></p>
+      <ul>
+        <li><b>A specific folder</b>, such as “work@example.com/Junk”. All matching mail goes there, whatever account it came from.</li>
+        <li><b>Every account: <i>name</i></b>: each email moves to the folder with that name in <i>its own</i> account, for example each account's own Junk.
+          If an account doesn't have that folder yet, JevIt creates it at the account's top level the first time it's needed.</li>
+        <li><b>New folder…</b>: create a folder right from the recipe. Choose where to create it (it starts on your default account), or tick
+          <b>Create in every account</b> to make it in all accounts at once and use it as an “Every account” folder.</li>
+      </ul>
+      <p>An email can only move once. If several moving recipes match, the one Jev is most sure about wins.
+        Moving between accounts works, but is slower because Thunderbird copies the email.</p>
+    </section>
+
+    <section class="card" id="teach">
+      <h2>Teaching Jev</h2>
+      <p>Jev can't be retrained, but you can give each recipe examples. Examples are sent along with the recipe's question, so Jev sees your earlier verdicts.</p>
+      <ul>
+        <li>Right-click emails and choose <b>JevIt → <i>recipe</i> → This is … / This is not …</b>.
+          “This is” adds a yes-example, adds the tag and runs the recipe's action. “This is not” adds a no-example and removes the tag.</li>
+        <li>For Spam there are also keyboard shortcuts, see <a href="#keys">Keyboard shortcuts</a>.</li>
+        <li>In the header popup, corrections become examples when “Remember my corrections as examples” is ticked.</li>
+      </ul>
+      <p>A recipe keeps its <b>20 newest</b> examples. In the manager, open a recipe and click <b>learned example(s)</b> to see them.
+        Click ✕ to remove one, or <b>Forget examples</b> to clear them all, then <b>Save</b>. Keep examples clear-cut: a wrong example teaches the wrong thing for a long time.</p>
+      <p>Teaching doesn't ask Jev anything, so it costs nothing.</p>
+    </section>
+
+    <section class="card" id="known">
+      <h2>People you know</h2>
+      <p>A recipe with <b>“Never match mail from people I know”</b> never matches mail from a known sender, whatever Jev says.
+        This is on for Spam by default. There's also a switch for Spam at the top of the manager: <b>“Never tag mail from people I know as Spam”</b>.</p>
+      <p>A sender counts as known when their exact address is:</p>
+      <ul>
+        <li>in one of your local address books. This includes <b>Collected Addresses</b>, where Thunderbird normally keeps everyone you've written to.</li>
+        <li>a recipient of an email in one of your <b>Sent</b> folders.</li>
+      </ul>
+      <p>Your own addresses never count as known, because spam often fakes them. The check runs inside Thunderbird, and your contacts are never sent anywhere.
+        Online (LDAP) address books aren't searched. A spammer who fakes a contact's address will get through: that's the trade-off.</p>
+      <p>The header popup shows “you know this sender: not tagged” when this applies. You can still tick the recipe by hand.</p>
+    </section>
+
+    <section class="card" id="triaged">
+      <h2>The Triaged tag</h2>
+      <p>Every email Jev has judged gets a <b>Triaged</b> tag, whether or not any recipe matched. Teaching doesn't add it, and neither does a failed triage.
+        Use Thunderbird's quick filter or a saved search on this tag to see what JevIt has processed, or what it hasn't yet.
+        You can change its colour in the Connection section.</p>
+    </section>
+
+    <section class="card" id="colours">
+      <h2>Tag colours</h2>
+      <p>Thunderbird uses a tag's colour for the email's row text, and has one colour per tag.
+        JevIt therefore gives every recipe two colours: a <b>pale one for dark themes</b> and a <b>deeper one for light themes</b>, in the same hue.</p>
+      <ul>
+        <li><b>Tag colours</b> (Connection section): <i>Follow Thunderbird's theme</i>, or always use the light or dark set.
+          When following the theme, JevIt recolours its tags when the theme changes. If that doesn't happen on your system, pick the set by hand.</li>
+        <li>Each recipe card has both colour boxes (dark · light). Its dot in the list shows both halves.</li>
+        <li><b>Default colours</b> (next to Add recipe) sets the built-in recipes and Triaged back to the default palette. Recipes you made yourself keep their colours.</li>
+      </ul>
+    </section>
+
+    <section class="card" id="usage">
+      <h2>Usage and budget</h2>
+      <p>JevIt counts every Jev request, the input tokens Jev reports, and the estimated cost, for this month and for all time.
+        TypeSafe charges only input tokens. Set the price per million tokens if TypeSafe's price changes.</p>
+      <p>The <b>monthly budget</b> (default $1, which is roughly 10,000 emails) stops all Jev requests once it's used up, until next month or until you raise it.
+        You'll get a notification. Set it to 0 for no limit. These are estimates: your TypeSafe bill is what counts.</p>
+    </section>
+
+    <section class="card" id="backup">
+      <h2>Backup</h2>
+      <p><b>Export…</b> saves all recipes and their learned examples to a file. <b>Import…</b> loads such a file:
+        recipes with the same tag key are replaced, others are added. Then click <b>Save</b>.</p>
+      <p>The backup doesn't include your API key, your settings or your usage counters. Folders chosen for moves only work in the same Thunderbird profile.
+        “Every account” folders store just the folder name, so they also work elsewhere.</p>
+    </section>
+
+    <section class="card" id="keys">
+      <h2>Keyboard shortcuts</h2>
+      <table class="keys">
+        <tr><td><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd></td><td>This is Spam: yes-example, Spam tag and Spam's action, for the selected or open email</td></tr>
+        <tr><td><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>D</kbd></td><td>This is not Spam: no-example and remove the Spam tag</td></tr>
+      </table>
+      <p>To change them: Add-ons and Themes → gear icon → <b>Manage Extension Shortcuts</b>. They work on the recipe with tag key <code>jev_spam</code>.</p>
+    </section>
+
+    <section class="card" id="privacy">
+      <h2>Privacy</h2>
+      <ul>
+        <li>Only after you tick consent, and only for mail you triage, JevIt sends TypeSafe (api.typesafe.ai) the following, over HTTPS with your own key:
+          the sender, recipients, subject and text (quoted replies removed, up to 6000 characters), your address, and your recipes with their examples.</li>
+        <li>Nothing is sent to the JevIt author. There's no tracking or analytics.</li>
+        <li>Your key, recipes, settings and usage counters stay in Thunderbird. The known-sender check runs locally.</li>
+        <li>Untick consent to stop all requests immediately. JevIt is not affiliated with TypeSafe.</li>
+      </ul>
+    </section>
+
+    <section class="card" id="tips">
+      <h2>Tips for good recipes</h2>
+      <ul>
+        <li><b>One condition per recipe.</b> Two recipes are better than one vague one.</li>
+        <li><b>Be literal.</b> Jev answers exactly what you wrote. If you find yourself explaining a wrong answer, add that explanation to the yes/no descriptions.</li>
+        <li><b>Don't ask for dates or maths.</b> “Due within 3 days” is unreliable; “says it's urgent or due very soon” works.</li>
+        <li><b>Use the popup to tune thresholds.</b> Look at the percentages on a few typical emails and set the threshold between the yes and no cases.</li>
+        <li><b>Be careful with moves and junk.</b> Start with “Only tag”, and switch to moving once the recipe has proven itself.</li>
+        <li><b>English works best.</b> Jev handles other languages, but less accurately. Check the first results.</li>
+        <li><b>Pin the model</b> (for example <code>jev-1.13.0</code>) once your thresholds are tuned, so a new Jev version doesn't change results unexpectedly.</li>
+      </ul>
+    </section>
+
+    <section class="card" id="trouble">
+      <h2>Troubleshooting</h2>
+      <dl>
+        <dt>A notification says triage failed or can't run</dt>
+        <dd>It says why: no API key, consent not given, budget reached, or an error from Jev (for example 401 for an invalid key). Click it to open the manager.
+          For automatic triage you get this at most once per Thunderbird session.</dd>
+        <dt>An email has no Triaged tag</dt>
+        <dd>It hasn't been triaged, or its triage failed. Select it and choose JevIt → Triage with Jev.</dd>
+        <dt>A recipe matches too much or too little</dt>
+        <dd>Adjust the threshold, sharpen the yes/no descriptions, or teach it with “This is / This is not”.</dd>
+        <dt>Mail from a contact still gets tagged as spam</dt>
+        <dd>Check that “Never match mail from people I know” is ticked for the Spam recipe, and that the exact sender address is in an address book.</dd>
+        <dt>More details</dt>
+        <dd>Tools → Developer Tools → Debug Add-ons → JevIt → <b>Inspect</b> shows the error console with JevIt's messages.</dd>
+      </dl>
+    </section>
+  </main>
+</body>

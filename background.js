@@ -11,12 +11,13 @@ async function triageList(list, manual) {
   const s = await loadSettings();
   const missing = !s.apiKey ? "no TypeSafe API key is set" : !s.consent ? "sending mail to TypeSafe is not allowed yet" : "";
   if (missing) return notify(`Can't triage with Jev: ${missing}. Click here to open the JevIt manager.`, manual);
+  await syncTags(s);
   let failed = 0, firstError;
   // ponytail: one message at a time; parallelize if big batches feel slow (limit: 1200 req/min)
   for await (const m of iterate(list)) {
     try {
       const { keys, answers } = await classify(m.id, s);
-      await applyRecipes(m.id, s.recipes, keys, answers, s.triagedColor);
+      await applyRecipes(m.id, s.recipes, keys, answers, true);
     } catch (e) {
       failed++;
       firstError ??= e;
@@ -31,6 +32,7 @@ async function teach(list, key, yes) {
   const s = await loadSettings();
   const r = s.recipes.find((r) => r.key === key);
   if (!r) return console.warn(`JevIt: no recipe with tag key ${key}`);
+  await syncTags(s);
   for await (const m of iterate(list)) {
     addExample(r, (await emailState(m.id)).email, yes);
     await applyRecipes(m.id, [r], yes ? [key] : [], {});
@@ -61,6 +63,7 @@ async function buildMenus() {
   }
   add({ id: "sep2", parentId: "root", type: "separator" });
   add({ id: "new", parentId: "root", title: "New recipe from selected mail…" });
+  add({ id: "help", parentId: "root", title: "JevIt help" });
 }
 
 messenger.menus.onClicked.addListener((info) => {
@@ -69,6 +72,7 @@ messenger.menus.onClicked.addListener((info) => {
   if (what === "triage") triageList(list, true);
   if (what === "yes" || what === "no") teach(list, key, what === "yes").catch(console.error);
   if (what === "new") newRecipeFrom(list).catch(console.error);
+  if (what === "help") messenger.tabs.create({ url: "help.html" });
 });
 
 // Keyboard shortcuts (change them under Add-ons → gear → Manage Extension Shortcuts).
@@ -83,8 +87,15 @@ messenger.commands.onCommand.addListener(async (command, tab) => {
   if (yes !== undefined) teach(await selectedMessages(tab), "jev_spam", yes).catch(console.error);
 });
 
-messenger.storage.onChanged.addListener((changes) => changes.recipes && buildMenus());
+// Keep menus and tag colours current. Tag colours follow the colour set, or Thunderbird's theme on "auto".
+const resyncTags = async () => syncTags(await loadSettings()).catch((e) => console.error("JevIt: tag sync failed", e));
+messenger.storage.onChanged.addListener((changes) => {
+  if (changes.recipes) buildMenus();
+  if (["recipes", "colorScheme", "triagedColor", "triagedColorLight"].some((k) => k in changes)) resyncTags();
+});
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", resyncTags);
 buildMenus();
+resyncTags();
 
 messenger.messages.onNewMailReceived.addListener(async (folder, list) => {
   if ((await loadSettings()).autoTriage) await triageList(list);

@@ -17,52 +17,73 @@ const movesMail = (action) => action === "move" || action === "junkmove";
 const EVERY_ACCOUNT = "*:";
 const TRIAGED = { key: "jev_triaged", name: "Triaged" }; // tag on every mail Jev has judged; colour is a setting
 
-const recipe = (key, name, color, threshold, question, yes, no) =>
-  ({ key, name, color, threshold, question, yes, no, action: "tag", folder: "", skipKnown: false, examples: [] });
+// Tag colours as [dark theme, light theme]. Thunderbird colours the message row text with the tag colour,
+// so each recipe has two. Dark set: one hue each at the same pale lightness (HSL h/100%/92%), a hint of
+// colour on a dark background (12-16:1 contrast). Light set: the same hues, darkened to >= 5.2:1 on white.
+const PALETTE = {
+  jev_spam: ["#FFD6D6", "#D31717"],
+  jev_reply: ["#FFEBD6", "#A15912"],
+  jev_shipping: ["#FFF5D6", "#85680F"],
+  jev_personal: ["#EEFFD6", "#4B770D"],
+  jev_finance: ["#D6FFE4", "#0E7C32"],
+  jev_jobs: ["#D6FFF8", "#0D7766"],
+  jev_calendar: ["#D6F8FF", "#0F758A"],
+  jev_newsletter: ["#D6E4FF", "#1E61E6"],
+  jev_social: ["#DDD6FF", "#6347EB"],
+  jev_urgent: ["#F8D6FF", "#B417D3"],
+  jev_security: ["#FFD6EB", "#CF1773"],
+};
+const NEW_RECIPE_COLORS = ["#E6E6E6", "#595959"]; // greys for recipes you add yourself
+const defaultColors = (key) => PALETTE[key] ?? NEW_RECIPE_COLORS;
+
+const recipe = (key, name, threshold, question, yes, no) => {
+  const [color, colorLight] = defaultColors(key);
+  return { key, name, color, colorLight, threshold, question, yes, no, action: "tag", folder: "", skipKnown: false, examples: [] };
+};
 
 // Ready-made recipes offered under "Add recipe". The first five are installed by default.
 const RECIPE_LIBRARY = [
-  { ...recipe("jev_spam", "Spam", "#CC0000", 0.8,
+  { ...recipe("jev_spam", "Spam", 0.8,
     "Is `email` unsolicited bulk mail, a scam, or a phishing attempt?",
     "Unrequested promotion from an unknown sender, fraud, fake invoices, requests for passwords or payment details.",
     "Mail the recipient signed up for or would expect, or genuine personal or business correspondence."), skipKnown: true },
-  recipe("jev_reply", "Needs reply", "#FF9900", 0.6,
+  recipe("jev_reply", "Needs reply", 0.6,
     "Does a person in `email` ask the recipient `me` to reply, decide, or do something?",
     "A direct question, request, invitation or deadline written by a person to `me`.",
     "Automated notifications, newsletters, receipts, FYI mail, or mail that needs nothing from `me`."),
-  recipe("jev_newsletter", "Newsletter", "#3366CC", 0.7,
+  recipe("jev_newsletter", "Newsletter", 0.7,
     "Is `email` a newsletter, marketing campaign, or other bulk mailing?",
     "Sent to a list: newsletters, promotions, product updates, digests.",
     "Written to the recipient individually, or a transactional message about their own account or order."),
-  recipe("jev_finance", "Invoice / receipt", "#009933", 0.7,
+  recipe("jev_finance", "Invoice / receipt", 0.7,
     "Is `email` an invoice, receipt, payment request, or payment confirmation?",
     "Bills, invoices, receipts, order confirmations with amounts, payment reminders.",
     "Anything that is not about a specific payment."),
-  recipe("jev_urgent", "Urgent", "#990099", 0.7,
+  recipe("jev_urgent", "Urgent", 0.7,
     "Does `email` say that something is urgent, time-critical, or due very soon?",
     "Explicit urgency: ASAP, today, outage, final notice, a deadline that is close.",
     "No time pressure expressed."),
-  recipe("jev_calendar", "Meeting / event", "#0099CC", 0.7,
+  recipe("jev_calendar", "Meeting / event", 0.7,
     "Is `email` an invitation to, or a change to, a meeting, call, or event?",
     "Calendar invites, reschedules, cancellations, event registrations with a date.",
     "Mail that only mentions an event in passing, or event marketing sent to a list."),
-  recipe("jev_shipping", "Shipping", "#996633", 0.7,
+  recipe("jev_shipping", "Shipping", 0.7,
     "Is `email` a shipping, delivery, or tracking update for an order?",
     "Dispatch notices, tracking numbers, delivery attempts, pickup notices.",
     "Order confirmations without shipping news, or marketing from a shop."),
-  recipe("jev_security", "Security alert", "#CC3366", 0.7,
+  recipe("jev_security", "Security alert", 0.7,
     "Is `email` a login alert, verification code, password reset, or other account security notice?",
     "New sign-in alerts, one-time codes, password or 2FA changes, account lock notices.",
     "Marketing or newsletters that only mention security."),
-  recipe("jev_personal", "Personal", "#669900", 0.7,
+  recipe("jev_personal", "Personal", 0.7,
     "Was `email` written personally by a human to `me`, rather than sent by an automated system or to a list?",
     "A human wrote this message to the recipient, such as a friend, colleague, or customer.",
     "Automated, templated, or bulk mail."),
-  recipe("jev_social", "Social", "#6666CC", 0.7,
+  recipe("jev_social", "Social", 0.7,
     "Is `email` a notification from a social network, forum, or community site?",
     "Likes, mentions, follows, comments, friend requests, digests from social sites.",
     "Direct mail from a person, or anything not from a social or community platform."),
-  recipe("jev_jobs", "Jobs / recruiting", "#336666", 0.7,
+  recipe("jev_jobs", "Jobs / recruiting", 0.7,
     "Is `email` about a job opportunity, a job application, or recruiting?",
     "Recruiter outreach, application confirmations, interview invitations, job alerts.",
     "Anything not about hiring or applying for work."),
@@ -73,7 +94,9 @@ const DEFAULTS = {
   consent: false, // explicit opt-in before any mail content leaves Thunderbird (ATN policy)
   model: "jev-latest",
   autoTriage: false,
-  triagedColor: "#2A9D8F",
+  colorScheme: "auto", // tag colour set: "auto" follows Thunderbird's theme, or "light" / "dark"
+  triagedColor: "#FFFFFF",
+  triagedColorLight: "#1F1F1F",
   budget: 1, // USD per calendar month; 0 = no limit
   pricePerMtok: 0.042, // USD per million input tokens (jev-1.13; output tokens are free)
   recipes: RECIPE_LIBRARY.slice(0, 5),
@@ -151,7 +174,7 @@ function draftRecipe(emails, takenKeys) {
     .replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 30) || "recipe";
   let key = `jev_${slug}`;
   for (let n = 2; takenKeys.includes(key); n++) key = `jev_${slug}_${n}`;
-  const r = recipe(key, name, "#808080", 0.7,
+  const r = recipe(key, name, 0.7,
     "Is `email` the same kind of mail as the ones in `examples_yes`?",
     `Same kind of sender, purpose and content as the mails in \`examples_yes\`, e.g. “${emails[0].subject}” from ${name}.`,
     "A different kind of mail, even if it comes from the same sender.");
@@ -170,7 +193,8 @@ function parseBackup(text) {
     return {
       key: r.key,
       name: str(r.name, r.key),
-      color: /^#[0-9a-f]{6}$/i.test(r.color) ? r.color : "#808080",
+      color: /^#[0-9a-f]{6}$/i.test(r.color) ? r.color : defaultColors(r.key)[0],
+      colorLight: /^#[0-9a-f]{6}$/i.test(r.colorLight) ? r.colorLight : defaultColors(r.key)[1],
       threshold: typeof r.threshold === "number" && r.threshold >= 0 && r.threshold <= 1 ? r.threshold : 0.7,
       question: r.question,
       yes: str(r.yes),
@@ -283,14 +307,10 @@ async function knownSender(author) {
 }
 
 // Set this extension's tags (leaving the user's other tags alone), then run the matched recipes' actions.
-// `triagedColor`: set when Jev judged this mail, which then also gets the Triaged tag in that colour
-// (kept on later re-triage or teaching).
-async function applyRecipes(id, recipes, keys, answers, triagedColor = null) {
-  const extra = triagedColor ? [{ ...TRIAGED, color: triagedColor }] : [];
-  const existing = new Set((await messenger.messages.tags.list()).map((t) => t.key));
-  for (const r of [...recipes, ...extra]) {
-    if (!existing.has(r.key)) await messenger.messages.tags.create(r.key, r.name, r.color.toUpperCase());
-  }
+// `triaged`: Jev judged this mail, so it also gets the Triaged tag (kept on later re-triage or teaching).
+// Tags must exist first: call syncTags(settings) before a batch.
+async function applyRecipes(id, recipes, keys, answers, triaged = false) {
+  const extra = triaged ? [TRIAGED] : [];
   const ours = new Set(recipes.map((r) => r.key));
   const m = await messenger.messages.get(id);
   const { update, folder } = plan(recipes, keys, answers);
@@ -298,6 +318,28 @@ async function applyRecipes(id, recipes, keys, answers, triagedColor = null) {
   await messenger.messages.update(id, { ...update, tags: [...tags] });
   const target = folder && m.folder ? await resolveFolder(folder, m.folder.accountId) : folder;
   if (target && target !== m.folder?.id) await messenger.messages.move([id], target);
+}
+
+// "light" or "dark": the chosen colour set, or Thunderbird's current theme when set to follow it.
+const activeScheme = (settings) =>
+  settings.colorScheme === "light" || settings.colorScheme === "dark"
+    ? settings.colorScheme
+    : globalThis.matchMedia?.("(prefers-color-scheme: dark)").matches === false ? "light" : "dark";
+
+// A recipe's tag colour in a scheme. Recipes saved before light colours existed use the default light colour.
+const colorFor = (r, scheme) => (scheme === "light" ? r.colorLight ?? defaultColors(r.key)[1] : r.color);
+
+// Create missing JevIt tags and give every JevIt tag its name and colour for the active scheme.
+async function syncTags(settings) {
+  const scheme = activeScheme(settings);
+  const triaged = { ...TRIAGED, color: settings.triagedColor, colorLight: settings.triagedColorLight };
+  const existing = new Map((await messenger.messages.tags.list()).map((t) => [t.key, t]));
+  for (const r of [...settings.recipes, triaged]) {
+    const color = colorFor(r, scheme).toUpperCase();
+    const tag = existing.get(r.key);
+    if (!tag) await messenger.messages.tags.create(r.key, r.name, color);
+    else if (tag.tag !== r.name || tag.color?.toUpperCase() !== color) await messenger.messages.tags.update(r.key, { tag: r.name, color });
+  }
 }
 
 // Folder id for a recipe's folder. An every-account folder is looked up by name in the given account
@@ -321,5 +363,5 @@ async function* iterate(list) {
 }
 
 if (typeof module !== "undefined") {
-  module.exports = { DEFAULTS, RECIPE_LIBRARY, cleanBody, questionFor, questionsFor, decide, plan, addExample, draftRecipe, parseBackup, askJev, resolveFolder, applyRecipes, knownSender, addUsage, budgetLeft, money };
+  module.exports = { DEFAULTS, RECIPE_LIBRARY, cleanBody, questionFor, questionsFor, decide, plan, addExample, draftRecipe, parseBackup, askJev, resolveFolder, applyRecipes, knownSender, addUsage, budgetLeft, money, syncTags, colorFor, activeScheme, PALETTE };
 }
