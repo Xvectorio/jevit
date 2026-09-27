@@ -27,7 +27,9 @@ $("#options").onclick = () => messenger.runtime.openOptionsPage();
     tr.querySelector("input").checked = result.keys.includes(r.key);
     tr.querySelector("span").textContent = r.name;
     tr.querySelector("meter").value = p;
-    tr.querySelector(".hint").textContent = `${Math.round(p * 100)}% (tag at ${Math.round(r.threshold * 100)}%)`;
+    tr.querySelector(".hint").textContent = result.known && r.skipKnown
+      ? `${Math.round(p * 100)}%, but you know this sender: not tagged`
+      : `${Math.round(p * 100)}% (tag at ${Math.round(r.threshold * 100)}%)`;
   }
   status(`Jev's suggestion for “${msg.subject}”. Adjust and apply:`);
   $("#apply").disabled = false;
@@ -40,6 +42,6 @@ $("#apply").onclick = async () => {
     for (const r of wrong) addExample(r, result.state.email, checked.includes(r.key));
     if (wrong.length) await messenger.storage.local.set({ recipes: settings.recipes });
   }
-  await applyRecipes(msgId, settings.recipes, checked, result.answers);
+  await applyRecipes(msgId, settings.recipes, checked, result.answers, settings.triagedColor);
   window.close();
 };

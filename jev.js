@@ -10,17 +10,22 @@ const ACTIONS = {
   read: "Tag + mark read",
   junk: "Tag + mark as junk",
   move: "Tag + move to folder",
+  junkmove: "Tag + mark as junk + move to folder",
 };
+const movesMail = (action) => action === "move" || action === "junkmove";
+// recipe.folder is a folder id, or EVERY_ACCOUNT + name: "the folder with that name in the mail's own account".
+const EVERY_ACCOUNT = "*:";
+const TRIAGED = { key: "jev_triaged", name: "Triaged" }; // tag on every mail Jev has judged; colour is a setting
 
 const recipe = (key, name, color, threshold, question, yes, no) =>
-  ({ key, name, color, threshold, question, yes, no, action: "tag", folder: "", examples: [] });
+  ({ key, name, color, threshold, question, yes, no, action: "tag", folder: "", skipKnown: false, examples: [] });
 
 // Ready-made recipes offered under "Add recipe". The first five are installed by default.
 const RECIPE_LIBRARY = [
-  recipe("jev_spam", "Spam", "#CC0000", 0.8,
+  { ...recipe("jev_spam", "Spam", "#CC0000", 0.8,
     "Is `email` unsolicited bulk mail, a scam, or a phishing attempt?",
     "Unrequested promotion from an unknown sender, fraud, fake invoices, requests for passwords or payment details.",
-    "Mail the recipient signed up for or would expect, or genuine personal or business correspondence."),
+    "Mail the recipient signed up for or would expect, or genuine personal or business correspondence."), skipKnown: true },
   recipe("jev_reply", "Needs reply", "#FF9900", 0.6,
     "Does a person in `email` ask the recipient `me` to reply, decide, or do something?",
     "A direct question, request, invitation or deadline written by a person to `me`.",
@@ -68,6 +73,7 @@ const DEFAULTS = {
   consent: false, // explicit opt-in before any mail content leaves Thunderbird (ATN policy)
   model: "jev-latest",
   autoTriage: false,
+  triagedColor: "#2A9D8F",
   recipes: RECIPE_LIBRARY.slice(0, 5),
 };
 
@@ -98,20 +104,28 @@ function questionsFor(recipes) {
   return Object.fromEntries(recipes.map((r) => [r.key, questionFor(r)]));
 }
 
-// Recipe keys whose yes-probability clears that recipe's threshold.
-function decide(recipes, answers) {
-  return recipes.filter((r) => answers[r.key]?.noul >= r.threshold).map((r) => r.key);
+// Recipe keys whose yes-probability clears that recipe's threshold. A recipe set to skip known senders
+// never matches mail from someone you know, whatever Jev says.
+function decide(recipes, answers, known = false) {
+  return recipes.filter((r) => answers[r.key]?.noul >= r.threshold && !(known && r.skipKnown)).map((r) => r.key);
 }
+
+// "Name <x@y.z>" -> "x@y.z"
+const senderEmail = (author = "") => (author.match(/<([^>]+)>/)?.[1] ?? author).trim().toLowerCase();
+
+// Every email address in a contact's fields (plain fields and vCard text alike), lowercased.
+const emailsIn = (contact) =>
+  Object.values(contact.properties ?? {}).flatMap((v) => (typeof v === "string" ? v.toLowerCase().match(/[^\s:;,<>"]+@[^\s:;,<>"]+/g) ?? [] : []));
 
 // What the matched recipes do besides tagging. A mail can only move once: the most probable move wins.
 function plan(recipes, keys, answers) {
   const hit = recipes.filter((r) => keys.includes(r.key));
-  const has = (a) => hit.some((r) => r.action === a);
+  const has = (...actions) => hit.some((r) => actions.includes(r.action));
   const move = hit
-    .filter((r) => r.action === "move" && r.folder)
+    .filter((r) => movesMail(r.action) && r.folder)
     .sort((a, b) => (answers[b.key]?.noul ?? 0) - (answers[a.key]?.noul ?? 0))[0];
   return {
-    update: { ...(has("read") && { read: true }), ...(has("flag") && { flagged: true }), ...(has("junk") && { junk: true }) },
+    update: { ...(has("read") && { read: true }), ...(has("flag") && { flagged: true }), ...(has("junk", "junkmove") && { junk: true }) },
     folder: move?.folder ?? null,
   };
 }
@@ -161,6 +175,7 @@ function parseBackup(text) {
       no: str(r.no),
       action: Object.hasOwn(ACTIONS, r.action) ? r.action : "tag",
       folder: str(r.folder),
+      skipKnown: r.skipKnown === true,
       examples: (Array.isArray(r.examples) ? r.examples : [])
         .filter((e) => typeof e?.label === "boolean")
         .map((e) => ({ from: str(e.from), subject: str(e.subject), snippet: str(e.snippet).slice(0, 300), label: e.label }))
@@ -209,21 +224,58 @@ async function emailState(id) {
 async function classify(id, settings) {
   if (!settings.consent) throw new Error("Allow sending mail to TypeSafe first (JevIt manager, top of the page).");
   const state = await emailState(id);
-  const answers = await askJev(settings, state, questionsFor(settings.recipes));
-  return { state, answers, keys: decide(settings.recipes, answers) };
+  const [answers, known] = await Promise.all([
+    askJev(settings, state, questionsFor(settings.recipes)),
+    settings.recipes.some((r) => r.skipKnown) ? knownSender(state.email.from) : false,
+  ]);
+  return { state, answers, known, keys: decide(settings.recipes, answers, known) };
+}
+
+// Is the sender someone you know: in a local address book (including Collected Addresses), or a recipient
+// of mail in your Sent folders? Checked locally; nothing is sent anywhere. Your own addresses don't count,
+// because spam often fakes them.
+// ponytail: two local lookups per mail, no cache; add a per-batch cache if big batches get slow.
+async function knownSender(author) {
+  const email = senderEmail(author);
+  if (!email.includes("@")) return false;
+  const own = (await messenger.identities.list()).map((i) => i.email.toLowerCase());
+  if (own.includes(email)) return false;
+  const contacts = await messenger.contacts.query({ searchString: email, includeRemote: false });
+  if (contacts.some((c) => emailsIn(c).includes(email))) return true;
+  const sent = (await messenger.folders.query({ specialUse: ["sent"] })).map((f) => f.id);
+  if (!sent.length) return false;
+  const found = await messenger.messages.query({ folderId: sent, recipients: email, messagesPerPage: 1 });
+  return (found.messages ?? found).length > 0;
 }
 
 // Set this extension's tags (leaving the user's other tags alone), then run the matched recipes' actions.
-async function applyRecipes(id, recipes, keys, answers) {
+// `triagedColor`: set when Jev judged this mail, which then also gets the Triaged tag in that colour
+// (kept on later re-triage or teaching).
+async function applyRecipes(id, recipes, keys, answers, triagedColor = null) {
+  const extra = triagedColor ? [{ ...TRIAGED, color: triagedColor }] : [];
   const existing = new Set((await messenger.messages.tags.list()).map((t) => t.key));
-  for (const r of recipes) {
+  for (const r of [...recipes, ...extra]) {
     if (!existing.has(r.key)) await messenger.messages.tags.create(r.key, r.name, r.color.toUpperCase());
   }
   const ours = new Set(recipes.map((r) => r.key));
   const m = await messenger.messages.get(id);
   const { update, folder } = plan(recipes, keys, answers);
-  await messenger.messages.update(id, { ...update, tags: [...m.tags.filter((t) => !ours.has(t)), ...keys] });
-  if (folder && folder !== m.folder?.id) await messenger.messages.move([id], folder);
+  const tags = new Set([...m.tags.filter((t) => !ours.has(t)), ...keys, ...extra.map((t) => t.key)]);
+  await messenger.messages.update(id, { ...update, tags: [...tags] });
+  const target = folder && m.folder ? await resolveFolder(folder, m.folder.accountId) : folder;
+  if (target && target !== m.folder?.id) await messenger.messages.move([id], target);
+}
+
+// Folder id for a recipe's folder. An every-account folder is looked up by name in the given account
+// (top-most match wins) and created at the account's top level if that account doesn't have it yet.
+async function resolveFolder(folder, accountId) {
+  if (!folder.startsWith(EVERY_ACCOUNT)) return folder;
+  const name = folder.slice(EVERY_ACCOUNT.length);
+  const found = (await messenger.folders.query({ accountId, name }))
+    .sort((a, b) => a.path.split("/").length - b.path.split("/").length)[0];
+  if (found) return found.id;
+  const [root] = await messenger.folders.query({ accountId, isRoot: true });
+  return (await messenger.folders.create(root.id, name)).id;
 }
 
 async function* iterate(list) {
@@ -235,5 +287,5 @@ async function* iterate(list) {
 }
 
 if (typeof module !== "undefined") {
-  module.exports = { DEFAULTS, RECIPE_LIBRARY, cleanBody, questionFor, questionsFor, decide, plan, addExample, draftRecipe, parseBackup, askJev };
+  module.exports = { DEFAULTS, RECIPE_LIBRARY, cleanBody, questionFor, questionsFor, decide, plan, addExample, draftRecipe, parseBackup, askJev, resolveFolder, applyRecipes, knownSender };
 }

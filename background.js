@@ -16,7 +16,7 @@ async function triageList(list, manual) {
   for await (const m of iterate(list)) {
     try {
       const { keys, answers } = await classify(m.id, s);
-      await applyRecipes(m.id, s.recipes, keys, answers);
+      await applyRecipes(m.id, s.recipes, keys, answers, s.triagedColor);
     } catch (e) {
       failed++;
       firstError ??= e;

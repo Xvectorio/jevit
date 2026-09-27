@@ -2,7 +2,7 @@
   "manifest_version": 2,
   "name": "JevIt: AI mail triage",
   "description": "Triage mail with TypeSafe Jev recipes: tag, star, mark read, junk or move. Unofficial; not affiliated with TypeSafe.",
-  "version": "1.0.0",
+  "version": "1.7.0",
   "browser_specific_settings": {
     "gecko": {
       "id": "jevit@xvector.io",
@@ -16,6 +16,8 @@
     "messagesTags",
     "messagesTagsList",
     "accountsRead",
+    "accountsFolders",
+    "addressBooks",
     "storage",
     "menus",
     "notifications",
@@ -42,7 +44,7 @@
     "64": "icon.svg"
   },
   "browser_action": {
-    "default_title": "JevIt recipes",
+    "default_title": "JevIt",
     "default_icon": "icon.svg"
   },
   "commands": {

@@ -1,57 +1,97 @@
 <!doctype html>
 <meta charset="utf-8">
-<title>JevIt recipes</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JevIt</title>
 <link rel="icon" href="icon.svg">
 <link rel="stylesheet" href="style.css">
-<body>
-  <h1><img src="icon.svg" alt="" width="28" height="28"> JevIt: AI mail triage</h1>
-  <fieldset class="consent">
-    <legend>Data sent to TypeSafe</legend>
-    <p>To classify an email, JevIt sends its <b>sender, recipients, subject and text</b> (up to 6000 characters), your address,
-      and your recipes with their learned examples to <b>TypeSafe (api.typesafe.ai)</b>, using your own API key.
-      This only happens for mail you triage: new mail if you turn on automatic triage, or mail you pick.
-      Nothing is sent to the JevIt author. JevIt is not affiliated with TypeSafe.</p>
-    <label><input type="checkbox" id="consent"> JevIt may send the content of emails I triage to TypeSafe</label>
-    <span class="hint">Nothing is sent until you tick this. Untick at any time to stop all requests.</span>
-  </fieldset>
-  <label>TypeSafe API key <input type="password" id="apiKey" autocomplete="off">
-    <span class="hint" id="keyHint"></span></label>
-  <label>Model <input type="text" id="model"> <span class="hint">jev-latest, or pin a version (e.g. jev-1.13.0) once thresholds are tuned</span></label>
-  <label><input type="checkbox" id="autoTriage"> Automatically run recipes on new mail</label>
+<body class="manager">
+  <header class="savebar">
+    <h1><img src="icon.svg" alt="" width="26" height="26"> JevIt <span class="sub">AI mail triage</span></h1>
+    <span id="status" role="status"></span>
+    <button class="save">Save</button>
+  </header>
 
-  <h2>Recipes</h2>
-  <p class="hint">Each recipe is one yes/no question to Jev. Refer to the mail as <code>`email`</code> and to yourself as <code>`me`</code>.
-    Write the exact condition; Jev reads it literally. A recipe matches when the yes-probability reaches its threshold.
-    A match always adds the recipe's tag; the action can do one more thing.</p>
-  <div id="recipes"></div>
-  <select id="library" aria-label="Add recipe"></select>
-  <p><button id="save">Save</button> <span id="status"></span></p>
-  <p>
-    <button id="export">Export recipes…</button>
-    <button id="import">Import recipes…</button>
-    <input type="file" id="importFile" accept=".json,application/json" hidden>
-    <span class="hint">Backup file with recipes and learned examples. The API key is not included.</span>
-  </p>
+  <main>
+    <section class="card">
+      <h2>Connection</h2>
+      <div class="consent">
+        <p>To classify an email, JevIt sends its <b>sender, recipients, subject and text</b> (up to 6000 characters), your address,
+          and your recipes with their learned examples to <b>TypeSafe (api.typesafe.ai)</b>, using your own API key.
+          This only happens for mail you triage: new mail if automatic triage is on, or mail you pick.
+          Nothing is sent to the JevIt author. JevIt is not affiliated with TypeSafe.</p>
+        <label class="check"><input type="checkbox" id="consent"> JevIt may send the content of emails I triage to TypeSafe</label>
+        <p class="hint">Nothing is sent until you tick this. Untick at any time to stop all requests.</p>
+      </div>
+      <div class="grid2">
+        <label>TypeSafe API key
+          <input type="password" id="apiKey" autocomplete="off" spellcheck="false">
+          <span class="hint warn" id="keyHint"></span>
+        </label>
+        <label>Model
+          <input type="text" id="model" spellcheck="false">
+          <span class="hint">jev-latest, or pin a version (e.g. jev-1.13.0) once thresholds are tuned</span>
+        </label>
+      </div>
+      <label class="check"><input type="checkbox" id="autoTriage"> Automatically run recipes on new mail</label>
+      <label class="check"><input type="color" id="triagedColor"> Colour of the “Triaged” tag, added to every email Jev has judged</label>
+    </section>
+
+    <section class="card">
+      <h2>Recipes</h2>
+      <p class="hint">Each recipe is one yes/no question to Jev. Refer to the mail as <code>`email`</code> and to yourself as <code>`me`</code>.
+        Write the exact condition; Jev reads it literally. A recipe matches when the yes-probability reaches its threshold.
+        A match always adds the recipe's tag; the action can do one more thing.</p>
+      <div id="recipes"></div>
+      <div class="toolbar">
+        <select id="library" aria-label="Add recipe"></select>
+        <span class="spacer"></span>
+        <button id="export">Export…</button>
+        <button id="import">Import…</button>
+        <input type="file" id="importFile" accept=".json,application/json" hidden>
+      </div>
+      <p class="hint">Export saves recipes and learned examples to a backup file. The API key is not included.</p>
+    </section>
+
+    <p class="bottom-save"><button class="save">Save</button></p>
+  </main>
 
   <template id="recipe">
-    <fieldset>
-      <div class="row">
-        <label>Name <input type="text" name="name" required></label>
-        <label>Tag key <input type="text" name="key" pattern="[a-z0-9_]+" required></label>
-        <label>Color <input type="color" name="color"></label>
-        <label>Threshold <input type="number" name="threshold" min="0" max="1" step="0.05"></label>
-      </div>
-      <label>Question <textarea name="question"></textarea></label>
-      <label>Counts as yes <textarea name="yes"></textarea></label>
-      <label>Counts as no <textarea name="no"></textarea></label>
-      <div class="row">
-        <label>When it matches <select name="action"></select></label>
-        <label class="folder">Folder <select name="folder"></select></label>
-      </div>
-      <details class="examples"><summary class="hint"></summary><ul></ul></details>
-      <button type="button" class="clear">Forget examples</button>
-      <button type="button" class="remove">Remove recipe</button>
-    </fieldset>
+    <details class="recipe">
+      <summary><span class="dot"></span><span class="title"></span><span class="meta"></span></summary>
+      <fieldset>
+        <div class="row">
+          <label>Name <input type="text" name="name" required></label>
+          <label>Tag key <input type="text" name="key" pattern="[a-z0-9_]+" required spellcheck="false"></label>
+          <label>Color <input type="color" name="color"></label>
+          <label>Threshold <input type="number" name="threshold" min="0" max="1" step="0.05"></label>
+        </div>
+        <label>Question <textarea name="question" rows="2"></textarea></label>
+        <div class="grid2">
+          <label>Counts as yes <textarea name="yes" rows="3"></textarea></label>
+          <label>Counts as no <textarea name="no" rows="3"></textarea></label>
+        </div>
+        <div class="grid2">
+          <label>When it matches <select name="action"></select></label>
+          <label class="folder">Folder <select name="folder"></select></label>
+        </div>
+        <div class="newfolder" hidden>
+          <label>Create in <select class="parent"></select></label>
+          <label>New folder name <input type="text" class="newname" placeholder="e.g. Spam by JevIt"></label>
+          <label class="check every-label"><input type="checkbox" class="every"> Create in every account: each email moves to the folder in its own account</label>
+          <div class="toolbar">
+            <button type="button" class="create">Create folder</button>
+            <button type="button" class="cancel">Cancel</button>
+          </div>
+        </div>
+        <label class="check"><input type="checkbox" name="skipKnown"> Never match mail from people I know: in my address books, or people I've sent mail to</label>
+        <details class="examples"><summary></summary><ul></ul></details>
+        <div class="toolbar">
+          <button type="button" class="clear">Forget examples</button>
+          <span class="spacer"></span>
+          <button type="button" class="remove danger">Remove recipe</button>
+        </div>
+      </fieldset>
+    </details>
   </template>
   <script src="jev.js"></script>
   <script src="options.js"></script>

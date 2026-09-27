@@ -1,6 +1,6 @@
 // node test.js  (set TYPESAFE_API_KEY to also run the default recipes against Jev)
 const assert = require("node:assert");
-const { DEFAULTS, RECIPE_LIBRARY, cleanBody, questionFor, questionsFor, decide, plan, addExample, draftRecipe, parseBackup, askJev } = require("./jev.js");
+const { DEFAULTS, RECIPE_LIBRARY, cleanBody, questionFor, questionsFor, decide, plan, addExample, draftRecipe, parseBackup, askJev, resolveFolder, applyRecipes, knownSender } = require("./jev.js");
 
 assert.equal(cleanBody("Hi\n> old quote\n\n\n\n  Bye  "), "Hi\n\nBye");
 assert.equal(cleanBody("x".repeat(9000)).length, 6000);
@@ -21,6 +21,8 @@ assert.equal(q.instructions.examples_yes[0].label, undefined);
 
 const rs = DEFAULTS.recipes;
 assert.deepEqual(decide(rs, { jev_spam: { noul: 0.8 }, jev_reply: { noul: 0.59 }, jev_urgent: { noul: 0.9 } }), ["jev_spam", "jev_urgent"]);
+// Known sender: Spam (skipKnown by default) can't match, other recipes still can.
+assert.deepEqual(decide(rs, { jev_spam: { noul: 0.99 }, jev_urgent: { noul: 0.9 } }, true), ["jev_urgent"]);
 
 // Actions: flags merge; only the most probable move wins; a move without a folder is ignored.
 const acts = [
@@ -34,6 +36,8 @@ const ans = { jev_newsletter: { noul: 0.75 }, jev_finance: { noul: 0.95 }, jev_u
 assert.deepEqual(plan(acts, ["jev_spam", "jev_reply", "jev_newsletter", "jev_finance", "jev_urgent"], ans),
   { update: { flagged: true, junk: true }, folder: "bills" });
 assert.deepEqual(plan(acts, [], ans), { update: {}, folder: null });
+const junkmove = [{ ...rs[0], action: "junkmove", folder: "junk" }];
+assert.deepEqual(plan(junkmove, ["jev_spam"], {}), { update: { junk: true }, folder: "junk" });
 // "More like this" drafts: named after the sender, unique key, the picked mails as yes examples.
 const free = { from: "Free Mobile <x@free.fr>", subject: "Nouvelle notification sur votre espace client", body: "Bonjour" };
 const d = draftRecipe([free], ["jev_free_mobile"]);
@@ -57,7 +61,58 @@ assert.deepEqual(junk.examples, [{ from: "", subject: "", snippet: "s".repeat(30
 assert.throws(() => parseBackup('{"recipes":[{"key":"Bad Key","question":"Q?"}]}'), /Invalid recipe/);
 assert.throws(() => parseBackup("{}"), /No recipes/);
 assert.throws(() => parseBackup("not json"));
-console.log("logic ok");
+
+// Every-account folders: the mail's own account's folder by name (top-most wins), created there if missing.
+const store = [
+  { id: "a:/", accountId: "a", path: "/", name: "", isRoot: true },
+  { id: "a:/INBOX/Spam", accountId: "a", path: "/INBOX/Spam", name: "Spam" },
+  { id: "a:/Spam", accountId: "a", path: "/Spam", name: "Spam" },
+  { id: "b:/", accountId: "b", path: "/", name: "", isRoot: true },
+];
+global.messenger = { folders: {
+  query: async (q) => store.filter((f) => Object.entries(q).every(([k, v]) => (f[k] ?? false) === v)),
+  create: async (parent, name) => { const f = { id: `${parent}${name}`, accountId: parent[0], path: `/${name}`, name }; store.push(f); return f; },
+} };
+(async () => {
+  assert.equal(await resolveFolder("a:/INBOX", "b"), "a:/INBOX", "a plain folder id is used as is");
+  assert.equal(await resolveFolder("*:Spam", "a"), "a:/Spam");
+  assert.equal(await resolveFolder("*:Spam", "b"), "b:/Spam", "created in the account that lacks it");
+  assert.equal(await resolveFolder("*:Spam", "b"), "b:/Spam", "and found, not re-created, next time");
+  assert.equal(store.length, 5);
+
+  // Triaged tag: added when Jev judged the mail, kept by later teaching; the user's own tags survive.
+  const msg = { id: 1, tags: ["$label1", "jev_spam"], folder: { id: "a:/INBOX", accountId: "a" } };
+  let updated;
+  const created = [];
+  messenger.messages = {
+    get: async () => msg, update: async (id, p) => (updated = p), move: async () => assert.fail("no move expected"),
+    tags: { list: async () => [{ key: "jev_spam" }], create: async (...args) => created.push(args) },
+  };
+  await applyRecipes(1, rs.slice(0, 2), ["jev_reply"], {}, "#2a9d8f");
+  assert.deepEqual(updated.tags, ["$label1", "jev_reply", "jev_triaged"]);
+  assert.deepEqual(created.at(-1), ["jev_triaged", "Triaged", "#2A9D8F"]);
+  msg.tags = updated.tags;
+  await applyRecipes(1, [rs[0]], [], {}); // "This is not Spam"
+  assert.deepEqual(updated.tags, ["$label1", "jev_reply", "jev_triaged"]);
+
+  // Known senders: exact address in a contact, or a recipient in Sent; never your own address.
+  global.messenger = {
+    identities: { list: async () => [{ email: "Me@Example.com" }] },
+    contacts: { query: async ({ searchString }) => [
+      { properties: { PrimaryEmail: "friend@x.org", vCard: "BEGIN:VCARD\nEMAIL;PREF=1:Pal@X.org\nEND:VCARD" } },
+      { properties: { PrimaryEmail: "aa@b.com" } }, // quick search matches loosely; must not count for a@b.com
+    ].filter((c) => JSON.stringify(c).toLowerCase().includes(searchString)) },
+    folders: { query: async () => [{ id: "a:/Sent" }] },
+    messages: { query: async ({ recipients }) => ({ messages: recipients === "client@corp.nl" ? [{}] : [] }) },
+  };
+  assert.equal(await knownSender("Friend <FRIEND@x.org>"), true);
+  assert.equal(await knownSender("pal@x.org"), true, "email found in vCard text");
+  assert.equal(await knownSender("Client <client@corp.nl>"), true, "you sent mail to them");
+  assert.equal(await knownSender("a@b.com"), false, "substring of a contact's address is not a match");
+  assert.equal(await knownSender("Me <me@example.com>"), false, "own address never counts");
+  assert.equal(await knownSender("stranger@spam.biz"), false);
+  console.log("logic ok");
+})();
 
 if (process.env.TYPESAFE_API_KEY) {
   const state = {

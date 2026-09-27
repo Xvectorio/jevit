@@ -18,6 +18,7 @@ JevIt sorts your mail with **recipes**. A recipe is one plain-language yes/no qu
 - Review Jev's scores for the open email in the header popup, then correct and apply them.
 - Triage selected mail from the context menu, or turn on automatic triage for new mail.
 - Export and import recipes as a JSON backup.
+- Spam protection for people you know: mail from your contacts, or from people you've sent mail to, is never tagged as Spam (a per-recipe option). It's checked locally.
 
 **Requirements**
 - A TypeSafe API key (https://typesafe.ai). Usage is billed to your TypeSafe account by TypeSafe.
@@ -47,6 +48,8 @@ JevIt is a Thunderbird add-on that classifies email with TypeSafe's Jev model. T
 - your recipes: their questions and descriptions, and their learned examples (sender, subject and the first 300 characters of example emails you marked).
 
 Triage happens only for new mail if you turned on automatic triage, or for mail you select or open and triage yourself. The request is authenticated with your own TypeSafe API key. TypeSafe processes this data under its own terms and privacy policy (https://docs.typesafe.ai/legal). According to TypeSafe, requests are not used to train its models.
+
+**Known senders.** For recipes set to "Never match mail from people I know" (Spam by default), JevIt checks locally whether the sender is in one of your local address books, or is a recipient of mail in your Sent folders. It needs Thunderbird's address book permission for this. The lookup happens inside Thunderbird, and your contacts and sent mail are never sent to TypeSafe or anyone else.
 
 **What stays on your computer.** Your API key, your recipes and learned examples, and your settings are stored only in Thunderbird's local extension storage. Exported backups are files you save yourself. They contain recipes and examples, but not your API key.
 
