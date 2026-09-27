@@ -140,8 +140,8 @@ const DEFAULTS = {
   skipTriaged: true, // triaging selected mail skips mail that already has the Triaged tag
   excludedAccounts: [], // account ids whose mail is never sent to Jev
   colorScheme: "auto", // tag colour set: "auto" follows Thunderbird's theme, or "light" / "dark"
-  triagedColor: "#DFDDD9", // warm light grey on dark themes
-  triagedColorLight: "#403A47", // dark plum grey on light themes
+  triagedColor: "#FFFFFF", // plain text colour, so triaged mail looks as before
+  triagedColorLight: "#000000",
   budget: 1, // USD per calendar month; 0 = no limit
   pricePerMtok: 0.042, // USD per million input tokens (jev-1.13; output tokens are free)
   bodyChars: 3000, // most of the body sent to Jev, after cleanup; the signal is usually near the top

@@ -176,11 +176,11 @@ global.messenger = { folders: {
   };
   const settings = { ...DEFAULTS, recipes: rs.slice(0, 2), colorScheme: "light" };
   await syncTags(settings);
-  assert.deepEqual(calls, [["update", "jev_spam", "#D31717"], ["create", "jev_triaged", "Triaged", "#403A47"], ["create", "jev_unsure", "Unsure", "#8A5A00"]],
+  assert.deepEqual(calls, [["update", "jev_spam", "#D31717"], ["create", "jev_triaged", "Triaged", "#000000"], ["create", "jev_unsure", "Unsure", "#8A5A00"]],
     "reply already right; spam recoloured; triaged and unsure created");
   calls.length = 0;
   await syncTags({ ...settings, colorScheme: "dark", unsureMargin: 0 }); // no Unsure tag when it's turned off
-  assert.deepEqual(calls, [["update", "jev_reply", "#FFEBD6"], ["create", "jev_triaged", "Triaged", "#DFDDD9"]]);
+  assert.deepEqual(calls, [["update", "jev_reply", "#FFEBD6"], ["create", "jev_triaged", "Triaged", "#FFFFFF"]]);
   // A recipe named like one of your own tags: Thunderbird refuses a second "Rental", so JevIt's gets a suffix.
   calls.length = 0;
   messenger.messages.tags.list = async () => [{ key: "rental", tag: "Rental", color: "#FF7800" }];
