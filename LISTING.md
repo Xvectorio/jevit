@@ -66,7 +66,7 @@ Triage happens only for new mail if you turned on automatic triage, or for mail 
 
 ## Notes to reviewer
 - There's no build step. The package is the readable source, and nothing is minified or loaded remotely.
-- To test triage you need a TypeSafe API key. <!-- Put a test key here, or say how the reviewer can get one; this field is private to reviewers. -->
+- To test triage you need a TypeSafe API key. Test key (limited budget, for review only): paste the contents of `reviewer-key.txt` (kept out of git).
 - Test steps:
   1. After install, the manager opens. Tick the consent box, paste the key and click Save.
   2. Open an email and click the JevIt button in the message header to see Jev's scores.
