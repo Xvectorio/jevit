@@ -45,6 +45,7 @@ JevIt is a Thunderbird add-on that classifies email with TypeSafe's Jev model. T
 
 **What is sent, and to whom.** Only after you tick "JevIt may send the content of emails I triage to TypeSafe" in the JevIt manager, JevIt sends the following to TypeSafe (https://api.typesafe.ai) over an encrypted HTTPS connection, for each email you triage:
 - the email's sender, recipients (To and CC), subject, and text body. Quoted replies are removed, and the body is limited to 6000 characters.
+- two of the email's headers: Authentication-Results (your mail server's SPF, DKIM and DMARC verdict, which helps spot forged senders) and List-Unsubscribe (which helps spot bulk mail).
 - the email address of your account's default identity, so recipes can tell whether mail is addressed to you.
 - your recipes: their questions and descriptions, and their learned examples (sender, subject and the first 300 characters of example emails you marked).
 

@@ -1,6 +1,7 @@
 // Shared triage logic for background, popup and options pages (plain script, no bundler).
 const JEV_API = "https://api.typesafe.ai/v1/systemone";
 const BODY_CHARS = 6000; // ponytail: hard cut of the body; add smarter excerpting if long mails misclassify
+const HEADER_CHARS = 1000; // per header, so a sender can't inflate the request
 const MAX_EXAMPLES = 20; // per recipe, newest kept; examples ride along in every request (~100 tokens each)
 
 // A recipe is one yes/no question to Jev. A match always tags the mail; `action` adds one more step.
@@ -45,7 +46,8 @@ const recipe = (key, name, threshold, question, yes, no) => {
 const RECIPE_LIBRARY = [
   { ...recipe("jev_spam", "Spam", 0.8,
     "Is `email` unsolicited bulk mail, a scam, or a phishing attempt?",
-    "Unrequested promotion from an unknown sender, fraud, fake invoices, requests for passwords or payment details.",
+    "Unrequested promotion from an unknown sender, fraud, fake invoices, requests for passwords or payment details. " +
+      "A sender that fails SPF, DKIM or DMARC in the Authentication-Results header is a strong sign.",
     "Mail the recipient signed up for or would expect, or genuine personal or business correspondence."), skipKnown: true },
   recipe("jev_reply", "Needs reply", 0.6,
     "Does a person in `email` ask the recipient `me` to reply, decide, or do something?",
@@ -53,7 +55,7 @@ const RECIPE_LIBRARY = [
     "Automated notifications, newsletters, receipts, FYI mail, or mail that needs nothing from `me`."),
   recipe("jev_newsletter", "Newsletter", 0.7,
     "Is `email` a newsletter, marketing campaign, or other bulk mailing?",
-    "Sent to a list: newsletters, promotions, product updates, digests.",
+    "Sent to a list: newsletters, promotions, product updates, digests. Bulk mail usually has a List-Unsubscribe header.",
     "Written to the recipient individually, or a transactional message about their own account or order."),
   recipe("jev_finance", "Invoice / receipt", 0.7,
     "Is `email` an invoice, receipt, payment request, or payment confirmation?",
@@ -263,9 +265,15 @@ async function emailState(id) {
       ? new DOMParser().parseFromString(html.content, "text/html").body.textContent
       : "";
   const identity = m.folder ? await messenger.identities.getDefault(m.folder.accountId) : null;
+  // Only the topmost header: your own mail server adds it, lower ones can be forged by the sender.
+  const { headers } = await messenger.messages.getFull(id);
+  const header = (name) => headers[name]?.[0]?.slice(0, HEADER_CHARS);
   return {
     me: identity?.email ?? "",
-    email: { from: m.author, to: m.recipients, cc: m.ccList, subject: m.subject, body: cleanBody(body) },
+    email: {
+      from: m.author, to: m.recipients, cc: m.ccList, subject: m.subject, body: cleanBody(body),
+      headers: { "Authentication-Results": header("authentication-results"), "List-Unsubscribe": header("list-unsubscribe") },
+    },
   };
 }
 

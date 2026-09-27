@@ -22,6 +22,7 @@
         <a href="#actions">Actions and folders</a>
         <a href="#teach">Teaching Jev</a>
         <a href="#known">People you know</a>
+        <a href="#tbjunk">Thunderbird's junk filter</a>
         <a href="#triaged">The Triaged tag</a>
         <a href="#colours">Tag colours</a>
         <a href="#usage">Usage and budget</a>
@@ -130,6 +131,21 @@
       <p>The header popup shows “you know this sender: not tagged” when this applies. You can still tick the recipe by hand.</p>
     </section>
 
+    <section class="card" id="tbjunk">
+      <h2>Thunderbird's junk filter</h2>
+      <p><b>Simplest:</b> once your Spam recipe has proven itself, turn Thunderbird's own junk filter off and let JevIt do the job,
+        with Spam set to <b>Tag + mark as junk + move to folder</b>. That gives you one source of truth.
+        For each account: Account Settings → Junk Settings → untick <b>Enable adaptive junk mail controls for this account</b>.
+        Thunderbird keeps what it has learned in <code>training.dat</code> in your profile folder. Keep that file in case you switch back.</p>
+      <p>If you keep Thunderbird's filter on:</p>
+      <ul>
+        <li><b>Untick “Move new junk messages to”.</b> JevIt sees new mail only after Thunderbird's junk check, and only in inboxes and normal folders.
+          Mail that Thunderbird moves to Junk is never triaged, so Thunderbird's mistakes stay hidden there.</li>
+        <li><b>Expect two verdicts.</b> Thunderbird can mark an email as junk that JevIt doesn't tag as Spam.
+          “This is not Spam” removes JevIt's tag but not Thunderbird's junk flag: click <b>Not Junk</b> for that.</li>
+      </ul>
+    </section>
+
     <section class="card" id="triaged">
       <h2>The Triaged tag</h2>
       <p>Every email Jev has judged gets a <b>Triaged</b> tag, whether or not any recipe matched. Teaching doesn't add it, and neither does a failed triage.
@@ -178,7 +194,7 @@
       <h2>Privacy</h2>
       <ul>
         <li>Only after you tick consent, and only for mail you triage, JevIt sends TypeSafe (api.typesafe.ai) the following, over HTTPS with your own key:
-          the sender, recipients, subject and text (quoted replies removed, up to 6000 characters), your address, and your recipes with their examples.</li>
+          the sender, recipients, subject and text (quoted replies removed, up to 6000 characters), the Authentication-Results and List-Unsubscribe headers, your address, and your recipes with their examples.</li>
         <li>Nothing is sent to the JevIt author. There's no tracking or analytics.</li>
         <li>Your key, recipes, settings and usage counters stay in Thunderbird. The known-sender check runs locally.</li>
         <li>Untick consent to stop all requests immediately. JevIt is not affiliated with TypeSafe.</li>
