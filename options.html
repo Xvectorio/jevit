@@ -16,7 +16,7 @@
     <section class="card">
       <h2>Connection</h2>
       <div class="consent">
-        <p>To classify an email, JevIt sends its <b>sender, recipients, subject and text</b> (up to 6000 characters), its authentication results and unsubscribe link, your address,
+        <p>To classify an email, JevIt sends its <b>sender, recipients, subject and text</b> (up to the text limit below), its authentication results and unsubscribe link, your address,
           and your recipes with their learned examples to <b>TypeSafe (api.typesafe.ai)</b>, using your own API key.
           This only happens for mail you triage: new mail if automatic triage is on, or mail you pick.
           Nothing is sent to the JevIt author. JevIt is not affiliated with TypeSafe.</p>
@@ -31,6 +31,10 @@
         <label title="Which Jev version answers. jev-latest follows new releases; a pinned version keeps results stable.">Model
           <input type="text" id="model" spellcheck="false">
           <span class="hint">jev-latest, or pin a version (e.g. jev-1.13.0) once thresholds are tuned</span>
+        </label>
+        <label title="How much of an email's text is sent to Jev, after quoted replies, styling and link paths are removed. Less sends less of your mail, but Jev may miss details further down.">Text limit (characters)
+          <input type="number" id="bodyChars" min="0" step="500">
+          <span class="hint">Default 3000. 0 sends no text: only sender, recipients, subject and headers.</span>
         </label>
       </div>
       <label class="check" title="Triage every new email in your inboxes and normal folders as it arrives. Mail that Thunderbird moves to Junk is not seen."><input type="checkbox" id="autoTriage"> Automatically run recipes on new mail</label>

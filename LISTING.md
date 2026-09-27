@@ -16,7 +16,9 @@ JevIt sorts your mail with **recipes**. A recipe is one plain-language yes/no qu
 - Write your own recipes, or create one from selected mail ("more like this").
 - Teach Jev: right-click mail → JevIt → "This is …" / "This is not …". The mail becomes an example the recipe learns from. Shortcuts: Alt+Shift+S (spam) and Alt+Shift+D (not spam).
 - Review Jev's scores for the open email in the header popup, then correct and apply them.
-- Triage selected mail from the context menu, or turn on automatic triage for new mail. The toolbar button counts the mails done, and a click stops a long run.
+- Triage selected mail from the context menu, or turn on automatic triage for new mail. Already triaged mail is skipped by default. The toolbar button counts the mails done, and a click stops a long run.
+- A Triaged tag on every mail Jev has judged, and tag colours for both light and dark themes.
+- Move matches to one folder, or to a folder of the same name in each account (such as each account's own Junk).
 - Export and import recipes as a JSON backup.
 - Usage and budget: see requests, tokens and estimated cost per month, and set a monthly spending limit (default $1).
 - Spam protection for people you know: mail from your contacts, or from people you've sent mail to, is never tagged as Spam (a per-recipe option). It's checked locally.
@@ -44,7 +46,7 @@ Mozilla Public License 2.0 (MPL-2.0)
 JevIt is a Thunderbird add-on that classifies email with TypeSafe's Jev model. This policy describes what data the add-on handles.
 
 **What is sent, and to whom.** Only after you tick "JevIt may send the content of emails I triage to TypeSafe" in the JevIt manager, JevIt sends the following to TypeSafe (https://api.typesafe.ai) over an encrypted HTTPS connection, for each email you triage:
-- the email's sender, recipients (To and CC), subject, and text body. Quoted replies are removed, and the body is limited to 6000 characters.
+- the email's sender, recipients (To and CC), subject, and text body. Quoted replies, styling and link paths are removed, and the body is limited to 3000 characters (adjustable in the manager).
 - two of the email's headers: Authentication-Results (your mail server's SPF, DKIM and DMARC verdict, which helps spot forged senders) and List-Unsubscribe (which helps spot bulk mail).
 - the email address of your account's default identity, so recipes can tell whether mail is addressed to you.
 - your recipes: their questions and descriptions, and their learned examples (sender, subject and the first 300 characters of example emails you marked).

@@ -16,6 +16,8 @@ Unofficial; not affiliated with TypeSafe.
 - See Jev's scores for the open email in the message-header popup, then correct and apply them.
 - Triage selected mail from the context menu, or automatically for new mail. Already triaged mail is skipped by default.
 - Progress on the toolbar button while triaging. Click the button to stop a long run.
+- A Triaged tag on every mail Jev has judged, and tag colours for both light and dark themes.
+- Move matches to one folder, or to a folder of the same name in each account (such as each account's own Junk).
 - Mail from your contacts, or from people you've written to, is never tagged as Spam. This is checked locally.
 - Usage and a monthly budget (default $1) so costs stay in check.
 - Export and import recipes as a JSON backup.

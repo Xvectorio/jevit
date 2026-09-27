@@ -3,7 +3,9 @@ const assert = require("node:assert");
 const { DEFAULTS, RECIPE_LIBRARY, cleanBody, questionFor, questionsFor, decide, plan, addExample, draftRecipe, parseBackup, askJev, resolveFolder, applyRecipes, knownSender, addUsage, budgetLeft, money, syncTags, colorFor, activeScheme, PALETTE } = require("./jev.js");
 
 assert.equal(cleanBody("Hi\n> old quote\n\n\n\n  Bye  "), "Hi\n\nBye");
-assert.equal(cleanBody("x".repeat(9000)).length, 6000);
+assert.equal(cleanBody("x".repeat(9000)).length, 3000);
+assert.equal(cleanBody("x".repeat(9000), 500).length, 500);
+assert.equal(cleanBody("Deal\u200B\u034F ends: https://t.example.com/c/abc?u=1 (or <https://shop.example/x>)"), "Deal ends: t.example.com (or <shop.example>)");
 
 const keys = RECIPE_LIBRARY.map((r) => r.key);
 assert.equal(new Set(keys).size, keys.length, "library keys must be unique");

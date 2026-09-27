@@ -1,6 +1,5 @@
 // Shared triage logic for background, popup and options pages (plain script, no bundler).
 const JEV_API = "https://api.typesafe.ai/v1/systemone";
-const BODY_CHARS = 6000; // ponytail: hard cut of the body; add smarter excerpting if long mails misclassify
 const HEADER_CHARS = 1000; // per header, so a sender can't inflate the request
 const MAX_EXAMPLES = 20; // per recipe, newest kept; examples ride along in every request (~100 tokens each)
 
@@ -107,18 +106,22 @@ const DEFAULTS = {
   triagedColorLight: "#403A47", // dark plum grey on light themes
   budget: 1, // USD per calendar month; 0 = no limit
   pricePerMtok: 0.042, // USD per million input tokens (jev-1.13; output tokens are free)
+  bodyChars: 3000, // most of the body sent to Jev, after cleanup; the signal is usually near the top
   recipes: RECIPE_LIBRARY.slice(0, 5),
 };
 
-function cleanBody(text) {
+// ponytail: hard cut at `max` characters; add smarter excerpting if long mails misclassify
+function cleanBody(text, max = DEFAULTS.bodyChars) {
   return text
+    .replace(/[\u00AD\u034F\u200B-\u200D\u2060\uFEFF]/g, "") // invisible preheader padding in marketing mail
+    .replace(/https?:\/\/([^/\s>)\]]+)[^\s>)\]]*/g, "$1") // links: keep the host, drop paths and tracking tokens
     .split("\n")
     .map((l) => l.replace(/[ \t ]+/g, " ").trim())
     .filter((l) => !l.startsWith(">")) // quoted replies are noise for the current mail
     .join("\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim()
-    .slice(0, BODY_CHARS);
+    .slice(0, max);
 }
 
 function questionFor(r) {
@@ -260,16 +263,19 @@ const loadUsage = async () => (await messenger.storage.local.get({ usage: null }
 
 const loadSettings = () => messenger.storage.local.get(DEFAULTS);
 
-async function emailState(id) {
+// Visible text of an HTML body: without CSS and scripts, which textContent would otherwise keep.
+function htmlText(html) {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  doc.querySelectorAll("style, script, noscript, template").forEach((e) => e.remove());
+  return doc.body.textContent;
+}
+
+async function emailState(id, bodyChars) {
   const m = await messenger.messages.get(id);
   const parts = await messenger.messages.listInlineTextParts(id);
   const plain = parts.find((p) => p.contentType === "text/plain");
   const html = parts.find((p) => p.contentType === "text/html");
-  const body = plain
-    ? plain.content
-    : html
-      ? new DOMParser().parseFromString(html.content, "text/html").body.textContent
-      : "";
+  const body = plain ? plain.content : html ? htmlText(html.content) : "";
   const identity = m.folder ? await messenger.identities.getDefault(m.folder.accountId) : null;
   // Only the topmost header: your own mail server adds it, lower ones can be forged by the sender.
   const { headers } = await messenger.messages.getFull(id);
@@ -277,7 +283,7 @@ async function emailState(id) {
   return {
     me: identity?.email ?? "",
     email: {
-      from: m.author, to: m.recipients, cc: m.ccList, subject: m.subject, body: cleanBody(body),
+      from: m.author, to: m.recipients, cc: m.ccList, subject: m.subject, body: cleanBody(body, bodyChars),
       headers: { "Authentication-Results": header("authentication-results"), "List-Unsubscribe": header("list-unsubscribe") },
     },
   };
@@ -292,7 +298,7 @@ async function classify(id, settings) {
   if (budgetLeft({ budget }, await loadUsage(), month) <= 0) {
     throw new Error(`Monthly Jev budget of ${money(budget)} reached. Raise it in the JevIt manager, or wait for next month.`, { cause: "halt" });
   }
-  const state = await emailState(id);
+  const state = await emailState(id, settings.bodyChars);
   const [response, known] = await Promise.all([
     askJev(settings, state, questionsFor(settings.recipes)),
     // A failing lookup must not fail the triage: the Jev request is already paid for. Treat as unknown.

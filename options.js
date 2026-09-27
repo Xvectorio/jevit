@@ -23,6 +23,7 @@ function read() {
   s.colorScheme = $("#colorScheme").value;
   s.budget = Number($("#budget").value);
   s.pricePerMtok = Number($("#pricePerMtok").value);
+  s.bodyChars = Number($("#bodyChars").value);
   document.querySelectorAll("#recipes fieldset").forEach((fs, i) => {
     for (const f of FIELDS) s.recipes[i][f] = fs.elements[f].value.trim();
     s.recipes[i].threshold = Number(fs.elements.threshold.value);
@@ -45,6 +46,7 @@ function render() {
   $("#spamKnown").checked = !!spam?.skipKnown;
   $("#budget").value = s.budget;
   $("#pricePerMtok").value = s.pricePerMtok;
+  $("#bodyChars").value = s.bodyChars;
   showUsage();
   $("#recipes").replaceChildren(
     ...s.recipes.map((r, i) => {
@@ -268,6 +270,10 @@ async function save() {
   read();
   if (!(s.budget >= 0) || !(s.pricePerMtok >= 0)) {
     $("#status").textContent = "Fix the budget and price: they must be numbers, 0 or more.";
+    return;
+  }
+  if (!(Number.isInteger(s.bodyChars) && s.bodyChars >= 0)) {
+    $("#status").textContent = "Fix the text limit: a whole number of characters, 0 or more.";
     return;
   }
   const keys = s.recipes.map((r) => r.key);
