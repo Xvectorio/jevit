@@ -28,6 +28,33 @@ Unofficial; not affiliated with TypeSafe.
 - Usage and a monthly budget (default $1) so costs stay in check.
 - Export and import recipes as a JSON backup.
 
+## How it works
+
+A Thunderbird 128+ MailExtension (Manifest V2) in plain JavaScript: no build step, no dependencies.
+
+| File | Role |
+|---|---|
+| `jev.js` | Shared logic: recipe library, request building, Jev client, scoring, usage and budget, sender checks, tags |
+| `background.js` | Triage runs (4 mails in parallel), context menus, auto-triage of new mail, toolbar progress, update migration |
+| `options.*` | The JevIt manager: connection, budget, recipes, backup export and import |
+| `popup.*` | Jev's scores for the open email, to correct and apply |
+| `test.js` | Node logic tests with stubbed `messenger` and `fetch`; a live check against Jev with `TYPESAFE_API_KEY` |
+
+**Classification.** Each email is one request to `api.typesafe.ai/v1/systemone` with one JSON state:
+sender, To/Cc, subject, the cleaned body (3000 characters by default), the Authentication-Results, List-Unsubscribe and Reply-To headers,
+link text next to the host it really points to, attachment names and types, and your own address.
+Every recipe is a TypeSafe **Noul** (a yes/no probability) with yes/no criteria and up to 20 learned examples, all in the same request.
+A recipe matches at its threshold. Star, read, junk and move wait until Jev is at least 90% sure; near misses get the Unsure tag.
+Rate limits (429/529) are retried with exponential backoff.
+
+**Safety and cost.**
+- Every field the sender controls is capped (1000 characters per header, 20 recipients, 10 links, 10 attachments), so a sender can't inflate the request.
+- A sender only counts as known after a DMARC pass for the From domain, in the Authentication-Results header written by your own mail server (learned from recent Inbox mail). The address book and Sent-folder lookup is local.
+- Jev's scores are stored for 90 days, keyed by a SHA-256 of the email and of each question: triaging again and the popup are free, and only edited or taught recipes are asked again.
+- Usage is counted as input tokens × price against a monthly budget ($1 by default). Nothing is sent before you opt in, and whole accounts can be excluded.
+
+Everything (API key, recipes, examples, usage, scores) stays in Thunderbird's `storage.local`. There is no server, telemetry or analytics.
+
 ## Requirements
 
 - Thunderbird 128 or newer
