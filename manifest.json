@@ -22,7 +22,8 @@
     "menus",
     "notifications",
     "sensitiveDataUpload",
-    "https://api.typesafe.ai/*"
+    "https://api.typesafe.ai/*",
+    "http://127.0.0.1/*"
   ],
   "background": {
     "scripts": [

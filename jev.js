@@ -136,6 +136,7 @@ const DEFAULTS = {
   apiKey: "",
   consent: false, // explicit opt-in before any mail content leaves Thunderbird (ATN policy)
   model: "jev-latest",
+  endpoint: JEV_API, // or a local Open-Jev server, e.g. http://127.0.0.1:8791/v1/systemone
   autoTriage: false,
   skipTriaged: true, // triaging selected mail skips mail Jev already judged: Triaged tag or stored scores
   triagedTag: true, // tag every judged mail Triaged. Thunderbird fills a selected row with its first tag's colour, so off keeps untouched mail looking as before
@@ -327,9 +328,9 @@ function parseBackup(text) {
 let queue = Promise.resolve();
 const serial = (fn) => (queue = queue.then(fn, fn));
 
-async function askJev({ apiKey, model }, state, questions) {
+async function askJev({ apiKey, model, endpoint }, state, questions) {
   for (let attempt = 0; ; attempt++) {
-    const r = await fetch(JEV_API, {
+    const r = await fetch(endpoint || JEV_API, {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({ model, state, questions }),

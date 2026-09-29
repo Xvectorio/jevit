@@ -257,10 +257,11 @@ global.messenger = { folders: {
 
   // Stored scores: asking again is free; only recipes whose question changed (edited, taught) go to Jev again.
   const local = { consent: true, budget: 1 };
-  let body = "Claim your prize", asked = [];
+  let body = "Claim your prize", asked = [], urls = [];
   global.fetch = async (url, { body: req }) => {
     const { questions } = JSON.parse(req);
     asked.push(Object.keys(questions));
+    urls.push(url);
     return { ok: true, json: async () => ({ answers: Object.fromEntries(Object.keys(questions).map((k) => [k, { noul: 0.95 }])), usage: { input_tokens: 1000 } }) };
   };
   global.messenger = {
@@ -283,6 +284,10 @@ global.messenger = { folders: {
   addExample(s2.recipes[0], email, true);
   await classify(1, s2);
   assert.deepEqual(asked[1], ["jev_spam"], "a taught recipe is asked again, the other reused");
+  assert.equal(urls[0], "https://api.typesafe.ai/v1/systemone", "TypeSafe by default");
+  addExample(s2.recipes[0], email, false);
+  await classify(1, { ...s2, endpoint: "http://127.0.0.1:8791/v1/systemone" });
+  assert.equal(urls[2], "http://127.0.0.1:8791/v1/systemone", "a local Open-Jev endpoint is used when set");
   local.budget = 0.00001;
   assert.deepEqual((await classify(1, s2)).keys, ["jev_spam", "jev_reply"], "stored scores still work when the budget is used up");
   body = "Claim your prize now";
