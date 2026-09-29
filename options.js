@@ -206,6 +206,20 @@ async function showUsage() {
   $("#budgetMeter").value = budget > 0 ? Math.min(current.cost / budget, 1) : 0;
 }
 $("#budget").oninput = showUsage;
+async function showErrors() {
+  const { errors = [] } = await messenger.storage.local.get("errors");
+  $("#errors").replaceChildren(...errors.map((e) => {
+    const li = document.createElement("li");
+    li.innerHTML = `<span class="hint"></span> <b></b><div></div>`;
+    li.querySelector("span").textContent = new Date(e.at).toLocaleString();
+    li.querySelector("b").textContent = e.what;
+    li.querySelector("div").textContent = e.message;
+    return li;
+  }));
+  if (!errors.length) $("#errors").innerHTML = `<li class="hint">No errors.</li>`;
+  $("#clearErrors").disabled = !errors.length;
+}
+$("#clearErrors").onclick = () => messenger.storage.local.remove("errors");
 $("#defaultColors").onclick = () => {
   read();
   for (const r of s.recipes) if (PALETTE[r.key]) [r.color, r.colorLight] = PALETTE[r.key];
@@ -347,10 +361,12 @@ async function loadFolders() {
   await loadFolders();
   s = await loadSettings();
   render();
+  showErrors();
   await takeDraft();
   messenger.storage.onChanged.addListener((changes) => {
     if (changes.draft?.newValue) takeDraft();
     if (changes.usage) showUsage();
+    if (changes.errors) showErrors();
     if (changes.authServers) showAuthServers();
     // Examples taught from the popup or context menu while this page is open; keep them so Save doesn't drop them.
     if (changes.recipes?.newValue) {

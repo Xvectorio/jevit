@@ -110,6 +110,16 @@
       <p class="hint">Export saves recipes and learned examples to a backup file. The API key is not included.</p>
     </section>
 
+    <section class="card">
+      <h2>Recent errors</h2>
+      <p class="hint">The last 50 problems JevIt ran into, newest first, with the full message a notification cuts off.</p>
+      <ul id="errors" class="errors"></ul>
+      <div class="toolbar">
+        <span class="spacer"></span>
+        <button id="clearErrors" title="Empty this list. Doesn't change anything else.">Clear</button>
+      </div>
+    </section>
+
     <p class="bottom-save"><button class="save">Save</button></p>
     <p class="hint" id="footer"><span id="version"></span> · <a href="https://ko-fi.com/jevit" id="kofi">Support JevIt on Ko-fi</a></p>
   </main>

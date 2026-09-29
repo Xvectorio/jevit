@@ -13,6 +13,17 @@ function notify(message, manual, reason = message) {
 }
 messenger.notifications.onClicked.addListener((id) => id === "jevit" && messenger.runtime.openOptionsPage());
 
+// The last errors, newest first, for the manager's "Recent errors" card: notifications are cut off and gone.
+let logged = Promise.resolve(); // one write at a time, so parallel triage doesn't drop entries
+function logError(what, e) {
+  console.error("JevIt:", what, e);
+  const entry = { at: Date.now(), what, message: String(e?.message ?? e) };
+  logged = logged.then(async () => {
+    const { errors = [] } = await messenger.storage.local.get("errors");
+    await messenger.storage.local.set({ errors: [entry, ...errors].slice(0, 50) });
+  }).catch(console.error);
+}
+
 async function triageList(list, manual) {
   const s = await loadSettings();
   const missing = !s.apiKey ? "no TypeSafe API key is set"
@@ -48,11 +59,12 @@ async function triageList(list, manual) {
         } catch (e) {
           if (e.cause === "halt") {
             halted = e;
+            logError("Triage stopped", e);
             break;
           }
           failed++;
           firstError ??= e;
-          console.error("JevIt:", m.subject, e);
+          logError(m.subject || "(no subject)", e);
         }
         done++;
         showBudgetBadge().catch(console.error);
@@ -129,9 +141,9 @@ async function buildMenus() {
 messenger.menus.onClicked.addListener((info) => {
   const [what, key] = String(info.menuItemId).split(":");
   const list = info.selectedMessages;
-  if (what === "triage") triageList(list, true).catch((e) => (console.error("JevIt:", e), notify(`Jev triage failed: ${e.message}`, true)));
-  if (what === "yes" || what === "no") teach(list, key, what === "yes").catch(console.error);
-  if (what === "new") newRecipeFrom(list).catch(console.error);
+  if (what === "triage") triageList(list, true).catch((e) => (logError("Triage", e), notify(`Jev triage failed: ${e.message}`, true)));
+  if (what === "yes" || what === "no") teach(list, key, what === "yes").catch((e) => logError("Teaching Jev", e));
+  if (what === "new") newRecipeFrom(list).catch((e) => logError("New recipe from mail", e));
   if (what === "help") messenger.tabs.create({ url: "help.html" });
 });
 
@@ -144,7 +156,7 @@ async function selectedMessages(tab) {
 
 messenger.commands.onCommand.addListener(async (command, tab) => {
   const yes = { "teach-spam": true, "teach-not-spam": false }[command];
-  if (yes !== undefined) teach(await selectedMessages(tab), "jev_spam", yes).catch(console.error);
+  if (yes !== undefined) teach(await selectedMessages(tab), "jev_spam", yes).catch((e) => logError("Teaching Jev", e));
 });
 
 // While triage runs, the toolbar button counts the mails done so far (the total isn't known up front:
@@ -162,7 +174,7 @@ async function showBudgetBadge() {
 }
 
 // Keep menus and tag colours current. Tag colours follow the colour set, or Thunderbird's theme on "auto".
-const resyncTags = async () => syncTags(await loadSettings()).catch((e) => console.error("JevIt: tag sync failed", e));
+const resyncTags = async () => syncTags(await loadSettings()).catch((e) => logError("Tag sync", e));
 messenger.storage.onChanged.addListener((changes) => {
   if (changes.recipes) buildMenus();
   if ("budget" in changes || "usage" in changes) showBudgetBadge().catch(console.error);
@@ -175,7 +187,7 @@ showBudgetBadge().catch(console.error);
 pruneScores().catch((e) => console.error("JevIt: pruning stored scores failed", e));
 
 messenger.messages.onNewMailReceived.addListener(async (folder, list) => {
-  if ((await loadSettings()).autoTriage) await triageList(list).catch((e) => (console.error("JevIt:", e), notify(`Jev triage failed: ${e.message}`, false)));
+  if ((await loadSettings()).autoTriage) await triageList(list).catch((e) => (logError("Automatic triage", e), notify(`Jev triage failed: ${e.message}`, false)));
 });
 
 messenger.runtime.onInstalled.addListener(async ({ reason }) => {
