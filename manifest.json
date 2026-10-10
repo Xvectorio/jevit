@@ -24,6 +24,9 @@
     "sensitiveDataUpload",
     "https://api.typesafe.ai/*"
   ],
+  "optional_permissions": [
+    "https://*/*"
+  ],
   "background": {
     "scripts": [
       "jev.js",

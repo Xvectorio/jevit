@@ -15,8 +15,8 @@ messenger.notifications.onClicked.addListener((id) => id === "jevit" && messenge
 
 async function triageList(list, manual) {
   const s = await loadSettings();
-  const missing = !s.apiKey ? "no TypeSafe API key is set"
-    : !s.consent ? "sending mail to TypeSafe is not allowed yet"
+  const missing = !s.apiKey ? "no API key is set"
+    : !s.consent ? "sending mail to the configured API service is not allowed yet"
     : ""; // a used-up budget halts in classify(), once a mail needs a request: stored scores are still free
   if (missing) return notify(`Can't triage with Jev: ${missing}. Click here to open the JevIt manager.`, manual);
   await syncTags(s);
@@ -36,7 +36,7 @@ async function triageList(list, manual) {
         }
         // Only for mail you pick: new mail can't have been triaged yet, so a Triaged tag on it didn't come from JevIt.
         // The tag can be turned off, so stored scores count too (for SCORE_DAYS).
-        if (manual && s.skipTriaged && (m.tags.includes(TRIAGED.key) || (await judgedBefore(m.id, s.bodyChars)))) {
+        if (manual && s.skipTriaged && (m.tags.includes(TRIAGED.key) || (await judgedBefore(m.id, s.bodyChars, s.apiBaseUrl)))) {
           skipped++;
           continue;
         }

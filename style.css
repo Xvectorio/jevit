@@ -45,7 +45,7 @@ meter { width: 120px; }
 
 .manager label { display: flex; flex-direction: column; gap: 4px; margin: 0 0 12px; font-size: 12px; font-weight: 600; color: var(--muted); }
 .manager label.check { flex-direction: row; align-items: center; gap: 8px; font-size: 14px; font-weight: 400; color: var(--text); }
-.manager input[type="text"], .manager input[type="password"], .manager input[type="number"], .manager select, .manager textarea {
+.manager input[type="text"], .manager input[type="url"], .manager input[type="password"], .manager input[type="number"], .manager select, .manager textarea {
   box-sizing: border-box; width: 100%; padding: 6px 8px;
   font: 14px/1.4 system-ui, sans-serif; color: var(--text);
   background: var(--field); border: 1px solid var(--border); border-radius: 6px;

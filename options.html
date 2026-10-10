@@ -15,22 +15,28 @@
   <main>
     <section class="card">
       <h2>Connection</h2>
+      <label title="Base URL of a System One-compatible HTTPS API, without /v1/systemone.">API base URL
+        <input type="url" id="apiBaseUrl" autocomplete="off" spellcheck="false" placeholder="https://api.typesafe.ai">
+        <span class="hint">TypeSafe: https://api.typesafe.ai · OpenRouter: https://openrouter.ai/api. JevIt adds /v1/systemone.</span>
+      </label>
       <div class="consent">
         <p>To classify an email, JevIt sends its <b>sender, recipients, subject and text</b> (up to the text limit below), its authentication results, unsubscribe link and Reply-To address, the text and host name of its links, the names of its attachments (not their contents), your address,
-          and your recipes with their learned examples to <b>TypeSafe (api.typesafe.ai)</b>, using your own API key.
+          and your recipes with their learned examples to <b id="apiDestination"></b>, using your own API key.
           This only happens for mail you triage: new mail if automatic triage is on, or mail you pick.
           Nothing is sent to the JevIt author. JevIt is not affiliated with TypeSafe.</p>
-        <label class="check" title="Required before JevIt sends anything to TypeSafe. Untick to stop all requests at once."><input type="checkbox" id="consent"> JevIt may send the content of emails I triage to TypeSafe</label>
-        <p class="hint">Nothing is sent until you tick this. Without it, JevIt can't triage mail. Untick at any time to stop all requests.</p>
+        <label class="check" title="Required before JevIt sends anything to the configured API service. Untick to stop new requests."><input type="checkbox" id="consent"> JevIt may send the content of emails I triage to the configured API service</label>
+        <p class="hint">With OpenRouter, mail goes through OpenRouter to TypeSafe. For a custom service, its own data policy applies.
+          Tick consent, enter the key for this service, then click Save. Untick at any time to stop new requests.
+          Changing the base URL clears the key and consent in this form; the saved connection stays active until you save or untick consent.</p>
       </div>
       <div class="grid2">
-        <label title="Your own key from typesafe.ai. Saved when you leave the field, and never included in backups.">TypeSafe API key
+        <label title="Your own key for the configured API service. Saved with the base URL when you click Save, and never included in backups.">API key
           <input type="password" id="apiKey" autocomplete="off" spellcheck="false">
           <span class="hint warn" id="keyHint"></span>
         </label>
         <label title="Which Jev version answers. jev-latest follows new releases; a pinned version keeps results stable.">Model
           <input type="text" id="model" spellcheck="false">
-          <span class="hint">jev-latest, or pin a version (e.g. jev-1.13.0) once thresholds are tuned</span>
+          <span class="hint">jev-latest follows new releases. For OpenRouter, jev-latest or typesafe/jev-1.13.</span>
         </label>
         <label title="How much of an email's text is sent to Jev, after quoted replies, styling and link paths are removed. Less sends less of your mail, but Jev may miss details further down.">Text limit (characters)
           <input type="number" id="bodyChars" min="0" step="500">
@@ -81,15 +87,15 @@
           <input type="number" id="budget" min="0" step="0.5">
           <span class="hint">0 = no limit. When it's reached, JevIt stops asking Jev until next month.</span>
         </label>
-        <label title="Used to estimate cost from the token counts Jev reports. Change it if TypeSafe's price changes.">Price per million input tokens (USD)
+        <label title="Used to estimate cost from the token counts Jev reports. Set the price charged by your API service.">Price per million input tokens (USD)
           <input type="number" id="pricePerMtok" min="0" step="0.001">
-          <span class="hint">Jev 1.13: $0.042; output tokens are free. Check typesafe.ai for current prices.</span>
+          <span class="hint">Default: $0.042. Check your API service for current prices.</span>
         </label>
       </div>
       <div class="toolbar">
-        <span class="hint">Estimated from the token counts Jev returns. Your TypeSafe bill is what counts.</span>
+        <span class="hint">Estimated from the token counts Jev returns. Your API service's bill is what counts.</span>
         <span class="spacer"></span>
-        <button id="resetUsage" title="Set this month's and all-time counters to zero. Doesn't change your TypeSafe bill.">Reset counters</button>
+        <button id="resetUsage" title="Set this month's and all-time counters to zero. Doesn't change your API service's bill.">Reset counters</button>
       </div>
     </section>
 

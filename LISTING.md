@@ -26,10 +26,10 @@ JevIt sorts your mail with **recipes**. A recipe is one plain-language yes/no qu
 - Spam protection for people you know: mail from your contacts, or from people you've sent mail to, is never tagged as Spam, when your mail server's DMARC check confirms the sender (a per-recipe option). It's checked locally.
 
 **Requirements**
-- A TypeSafe API key (https://typesafe.ai). Usage is billed to your TypeSafe account by TypeSafe.
+- A TypeSafe API key (https://typesafe.ai) or an OpenRouter API key (https://openrouter.ai). Usage is billed by your configured API service.
 - Thunderbird 128 or newer.
 
-**Privacy.** Nothing is sent until you explicitly allow it in the JevIt manager. Mail content goes only to TypeSafe, never to the JevIt author. See the privacy policy for details.
+**Privacy.** Nothing is sent until you explicitly allow it in the JevIt manager and save the connection. Mail content goes to your configured API service; OpenRouter forwards it to TypeSafe. See the privacy policy for details.
 
 JevIt is an independent project and is not affiliated with or endorsed by TypeSafe. "Jev" is TypeSafe's model name.
 
@@ -50,7 +50,7 @@ Mozilla Public License 2.0 (MPL-2.0)
 
 JevIt is a Thunderbird add-on that classifies email with TypeSafe's Jev model. This policy describes what data the add-on handles.
 
-**What is sent, and to whom.** Only after you tick "JevIt may send the content of emails I triage to TypeSafe" in the JevIt manager, JevIt sends the following to TypeSafe (https://api.typesafe.ai) over an encrypted HTTPS connection, for each email you triage:
+**What is sent, and to whom.** Only after you tick "JevIt may send the content of emails I triage to the configured API service" in the JevIt manager and save the connection, JevIt sends the following to the configured API base over an encrypted HTTPS connection, for each email you triage. The default is TypeSafe (https://api.typesafe.ai). When you select OpenRouter (https://openrouter.ai/api), OpenRouter receives the data and forwards it to TypeSafe. Other custom services receive the same data under their own policies:
 - the email's sender, recipients (To and CC), subject, and text body. Quoted replies, styling and link paths are removed, and the body is limited to 3000 characters (adjustable in the manager).
 - three of the email's headers: Authentication-Results (your mail server's SPF, DKIM and DMARC verdict, which helps spot forged senders), List-Unsubscribe (which helps spot bulk mail) and Reply-To (where replies really go).
 - for up to 10 links, the link's text and the host name it points to (such as "Log in → example.com"), without paths or tracking codes. Links are never opened.
@@ -58,15 +58,15 @@ JevIt is a Thunderbird add-on that classifies email with TypeSafe's Jev model. T
 - the email address of your account's default identity, so recipes can tell whether mail is addressed to you.
 - your recipes: their questions and descriptions, and their learned examples (sender, subject and the first 300 characters of example emails you marked).
 
-Triage happens only for new mail if you turned on automatic triage, or for mail you select or open and triage yourself. Mail in accounts you exclude in the manager is never sent. The request is authenticated with your own TypeSafe API key. TypeSafe processes this data under its own terms and privacy policy (https://docs.typesafe.ai/legal). According to TypeSafe, requests are not used to train its models.
+Triage happens only for new mail if you turned on automatic triage, or for mail you select or open and triage yourself. Mail in accounts you exclude in the manager is never sent. The request is authenticated with your own key for the configured API service. TypeSafe processes data under its terms and privacy policy (https://docs.typesafe.ai/legal). When you use OpenRouter, its terms and privacy policy also apply (https://openrouter.ai/privacy). For other custom services, consult that service's data policy.
 
 **Known senders.** For recipes set to "Never match mail from people I know" (Spam by default), JevIt checks locally whether the sender is in one of your local address books, or is a recipient of mail in your Sent folders. This only counts when the Authentication-Results header from your mail server shows a DMARC pass for the sender's domain, so a faked sender address isn't trusted. To know which Authentication-Results header is your mail server's, JevIt reads that header on up to 5 recent Inbox mails per account, weekly. It needs Thunderbird's address book permission for this. The lookup happens inside Thunderbird, and your contacts and sent mail are never sent to TypeSafe or anyone else.
 
 **What stays on your computer.** Your API key, your recipes and learned examples, your usage counters (requests, tokens, estimated cost), Jev's scores for mail it has judged (numbers, keyed by a fingerprint of the email, not its content, and removed after 90 days) and your settings are stored only in Thunderbird's local extension storage. Exported backups are files you save yourself. They contain recipes and examples, but not your API key.
 
-**What the author receives.** Nothing. JevIt has no analytics, telemetry, tracking or server of its own, and it sends no data to the author or to anyone other than TypeSafe.
+**What the author receives.** Nothing by default. JevIt has no analytics, telemetry, tracking or server of its own. Classification requests go only to the configured API service, which may forward them to its model provider.
 
-**Your control.** Untick the consent box to stop all requests immediately. Remove recipes or examples in the manager, or uninstall JevIt to delete all its stored data. Tags JevIt added to your mail remain until you remove them.
+**Your control.** Untick the consent box to stop new requests without saving; requests already sent cannot be recalled. Changing the API base clears the key and consent in the form. The previous connection remains active until you save, so untick consent before editing the base to stop new requests first. Thunderbird asks for access to a custom API host when you save with consent enabled. Remove recipes or examples in the manager, or uninstall JevIt to delete all its stored data. Tags JevIt added to your mail remain until you remove them.
 
 **Contact.** jevit@xvector.io
 
@@ -77,7 +77,7 @@ Triage happens only for new mail if you turned on automatic triage, or for mail 
   1. After install, the manager opens. Tick the consent box, paste the key and click Save.
   2. Open an email and click the JevIt button in the message header to see Jev's scores.
   3. Or right-click mail → JevIt → Triage with Jev.
-- The `sensitiveDataUpload` permission is declared because email content is sent to TypeSafe for classification, which is the add-on's core function. It needs opt-in consent first.
+- The `sensitiveDataUpload` permission is declared because email content is sent to the configured API service for classification, which is the add-on's core function. It needs opt-in consent first. The optional HTTPS host permission allows requesting access to the specific custom host selected in settings.
 
 ## Screenshots to add
 1. The recipe manager, including the consent box.

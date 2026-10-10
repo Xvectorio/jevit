@@ -1,5 +1,21 @@
 // Shared triage logic for background, popup and options pages (plain script, no bundler).
-const JEV_API = "https://api.typesafe.ai/v1/systemone";
+const JEV_API_BASE = "https://api.typesafe.ai";
+
+// System One bases exclude /v1/systemone; OpenRouter uses https://openrouter.ai/api.
+function normalizeApiBase(value = JEV_API_BASE) {
+  let url;
+  try { url = new URL(value.trim() || JEV_API_BASE); } catch {
+    throw new Error("API base URL must be an absolute HTTPS URL.");
+  }
+  if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash) {
+    throw new Error("API base URL must use HTTPS, without credentials, a query or a fragment.");
+  }
+  const base = url.href.replace(/\/+$/, "");
+  if (base.endsWith("/v1") || base.endsWith("/v1/systemone")) {
+    throw new Error("Enter the API base without /v1 or /v1/systemone; JevIt adds /v1/systemone.");
+  }
+  return base;
+}
 const HEADER_CHARS = 1000; // per header (and per address, subject, sender), so a sender can't inflate the request
 const MAX_RECIPIENTS = 20; // To and Cc each; enough to tell a personal mail from a mass mailing
 const MAX_EXAMPLES = 20; // per recipe, newest kept; examples ride along in every request (~100 tokens each)
@@ -134,6 +150,7 @@ function updateRecipes(recipes) {
 
 const DEFAULTS = {
   apiKey: "",
+  apiBaseUrl: JEV_API_BASE,
   consent: false, // explicit opt-in before any mail content leaves Thunderbird (ATN policy)
   model: "jev-latest",
   autoTriage: false,
@@ -185,13 +202,17 @@ function questionsFor(recipes) {
 // changing a threshold. A score belongs to the exact email Jev saw and the exact question (model, recipe question,
 // criteria and examples): editing or teaching a recipe makes its old scores stale. Keyed by a hash of the email,
 // not its Message-ID: the sender picks that, and could borrow the scores of mail you trust.
+// Each API base has its own scores; the default base keeps the original keys for existing installs.
 // Kept for SCORE_DAYS after Jev was last asked about the email (reuse doesn't extend it); pruneScores() runs at startup.
 const SCORE_DAYS = 90;
 const digest = async (value) => {
   const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(value)));
   return [...new Uint8Array(bytes).slice(0, 16)].map((b) => b.toString(16).padStart(2, "0")).join("");
 };
-const scoreKey = async (state) => `score:${await digest(state)}`;
+const scoreKey = async (state, apiBaseUrl) => {
+  const base = normalizeApiBase(apiBaseUrl);
+  return `score:${await digest(base === JEV_API_BASE ? state : [base, state])}`;
+};
 const questionSigs = (recipes, model) => Promise.all(recipes.map((r) => digest([model, questionFor(r)])));
 
 // Answers from stored scores, and the recipes Jev still has to be asked. `sigs` from questionSigs(recipes).
@@ -327,10 +348,12 @@ function parseBackup(text) {
 let queue = Promise.resolve();
 const serial = (fn) => (queue = queue.then(fn, fn));
 
-async function askJev({ apiKey, model }, state, questions) {
+async function askJev({ apiKey, model, apiBaseUrl }, state, questions) {
+  const endpoint = `${normalizeApiBase(apiBaseUrl)}/v1/systemone`;
   for (let attempt = 0; ; attempt++) {
-    const r = await fetch(JEV_API, {
+    const r = await fetch(endpoint, {
       method: "POST",
+      redirect: "error", // mail and credentials belong only to the configured endpoint
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({ model, state, questions }),
     });
@@ -417,18 +440,23 @@ async function emailState(id, bodyChars) {
 }
 
 // Has Jev judged this exact email before (stored scores, kept SCORE_DAYS)? Works without the Triaged tag.
-async function judgedBefore(id, bodyChars) {
-  const key = await scoreKey(await emailState(id, bodyChars));
+async function judgedBefore(id, bodyChars, apiBaseUrl) {
+  const key = await scoreKey(await emailState(id, bodyChars), apiBaseUrl);
   return !!(await messenger.storage.local.get(key))[key];
 }
 
 async function classify(id, settings) {
-  // Consent and budget are read fresh, so changing them in the manager takes effect mid-batch.
+  // Consent, budget and API base are read fresh so a running batch respects connection changes.
   // Their errors have cause "halt": the rest of a batch would fail the same way.
-  const { consent, budget } = await messenger.storage.local.get({ consent: DEFAULTS.consent, budget: DEFAULTS.budget });
-  if (!consent) throw new Error("Allow sending mail to TypeSafe first (JevIt manager, top of the page).", { cause: "halt" });
+  const { consent, budget, apiBaseUrl } = await messenger.storage.local.get({
+    consent: DEFAULTS.consent, budget: DEFAULTS.budget, apiBaseUrl: DEFAULTS.apiBaseUrl,
+  });
+  if (!consent) throw new Error("Allow sending mail to the configured API service first (JevIt manager, top of the page).", { cause: "halt" });
+  if (normalizeApiBase(apiBaseUrl) !== normalizeApiBase(settings.apiBaseUrl)) {
+    throw new Error("API connection changed. Start triage again to use the saved connection.", { cause: "halt" });
+  }
   const state = await emailState(id, settings.bodyChars);
-  const key = await scoreKey(state);
+  const key = await scoreKey(state, settings.apiBaseUrl);
   const [sigs, stored] = await Promise.all([questionSigs(settings.recipes, settings.model), messenger.storage.local.get(key).then((o) => o[key])]);
   const { answers: kept, missing } = reuse(settings.recipes, sigs, stored);
   // Only a request costs money: stored scores are reused even when the budget is used up.

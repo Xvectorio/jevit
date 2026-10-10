@@ -3,6 +3,7 @@ const SPAM_KEY = "jev_spam"; // the Connection switch "Never tag … as Spam" mi
 const FIELDS = ["name", "key", "color", "colorLight", "question", "yes", "no", "action", "folder"];
 const options = (select, entries) => select.replaceChildren(...entries.map(([value, text]) => new Option(text, value)));
 let s, folders, parents, defaultAccount, sharedNames, accounts;
+let shownApiBase, saving = false;
 // Recipe keys whose card / example list is expanded, kept across render().
 const openRecipes = new Set();
 const openExamples = new Set();
@@ -13,6 +14,7 @@ const keepOpen = (el, set, key) => {
 
 // Pull form values back into `s` before any re-render or save.
 function read() {
+  s.apiBaseUrl = $("#apiBaseUrl").value.trim();
   s.apiKey = $("#apiKey").value.trim();
   s.consent = $("#consent").checked;
   s.model = $("#model").value.trim() || DEFAULTS.model;
@@ -36,6 +38,10 @@ function read() {
 }
 
 function render() {
+  $("#apiBaseUrl").value = s.apiBaseUrl;
+  shownApiBase = s.apiBaseUrl;
+  try { shownApiBase = normalizeApiBase(shownApiBase); } catch {}
+  showApiDestination();
   $("#apiKey").value = s.apiKey;
   $("#consent").checked = s.consent;
   showKeyHint();
@@ -163,8 +169,29 @@ function render() {
   ]);
 }
 
-// The key can only be entered after consent. Both save immediately, without Save:
-// unticking stops requests right away, and a typed key can't be lost to a failed Save.
+function showApiDestination() {
+  try {
+    $("#apiDestination").textContent = normalizeApiBase($("#apiBaseUrl").value);
+  } catch {
+    $("#apiDestination").textContent = "the API service (fix the base URL before saving)";
+  }
+}
+
+// Never carry a key or consent over to a different service, including a different base path.
+$("#apiBaseUrl").oninput = () => {
+  let base = $("#apiBaseUrl").value.trim();
+  try { base = normalizeApiBase(base); } catch {}
+  if (base !== shownApiBase) {
+    $("#consent").checked = false;
+    $("#apiKey").value = "";
+    shownApiBase = base;
+    $("#status").textContent = "Connection not saved. Give consent and enter the key for this service, then Save.";
+  }
+  showApiDestination();
+  showKeyHint();
+};
+
+// Connection fields are saved together. Revoking consent still takes effect without Save.
 function showKeyHint() {
   const consent = $("#consent").checked;
   $("#apiKey").disabled = !consent;
@@ -173,13 +200,12 @@ function showKeyHint() {
     : $("#apiKey").value.trim() ? "" : "No API key yet: JevIt can't triage until you add one.";
 }
 $("#apiKey").oninput = showKeyHint;
-$("#apiKey").onchange = async (e) => {
-  await messenger.storage.local.set({ apiKey: e.target.value.trim() });
-  $("#status").textContent = "API key saved.";
-};
 $("#consent").onchange = async (e) => {
   showKeyHint();
-  await messenger.storage.local.set({ consent: e.target.checked });
+  if (!e.target.checked) {
+    await messenger.storage.local.set({ consent: false });
+    $("#status").textContent = "Consent withdrawn. New requests are stopped.";
+  }
   if (e.target.checked && !$("#apiKey").value.trim()) $("#apiKey").focus();
 };
 
@@ -292,7 +318,14 @@ const validFolder = (folder) =>
   folders.some((f) => f.id === folder) || (folder.startsWith(EVERY_ACCOUNT) && folder.length > EVERY_ACCOUNT.length);
 
 async function save() {
+  if (saving) return;
   read();
+  try {
+    s.apiBaseUrl = normalizeApiBase(s.apiBaseUrl);
+  } catch (err) {
+    $("#status").textContent = err.message;
+    return;
+  }
   if (!(s.budget >= 0) || !(s.pricePerMtok >= 0)) {
     $("#status").textContent = "Fix the budget and price: they must be numbers, 0 or more.";
     return;
@@ -314,9 +347,32 @@ async function save() {
       `Fix “${bad?.name ?? "duplicate tag key"}”: key a-z0-9_ and unique, question set, threshold 0–1, folder chosen for moves.`;
     return;
   }
-  await messenger.storage.local.set(s);
-  await syncTags(s);
-  $("#status").textContent = "Saved.";
+  const saved = structuredClone(s);
+  saving = true;
+  try {
+    // Request from the Save click, before any await, to preserve the user gesture.
+    // Host match patterns cover all ports; the request itself uses the exact saved base URL.
+    if (new URL(saved.apiBaseUrl).origin !== JEV_API_BASE && saved.consent) {
+      const granted = await messenger.permissions.request({ origins: [`https://${new URL(saved.apiBaseUrl).hostname}/*`] });
+      if (!granted) {
+        $("#status").textContent = "Connection not saved: access to this API host was not granted.";
+        return;
+      }
+    }
+    if (normalizeApiBase($("#apiBaseUrl").value) !== saved.apiBaseUrl || $("#apiKey").value.trim() !== saved.apiKey) {
+      $("#status").textContent = "Connection changed while saving. Click Save again.";
+      return;
+    }
+    // Do not restore consent if it was withdrawn while the permission prompt was open.
+    saved.consent = saved.consent && $("#consent").checked;
+    await messenger.storage.local.set(saved);
+    await syncTags(saved);
+    $("#status").textContent = "Saved.";
+  } catch (err) {
+    $("#status").textContent = `Could not save settings: ${err.message}`;
+  } finally {
+    saving = false;
+  }
 }
 document.querySelectorAll(".save").forEach((b) => (b.onclick = save));
 $("#help").onclick = (e) => {

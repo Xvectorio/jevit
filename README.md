@@ -31,9 +31,51 @@ Unofficial; not affiliated with TypeSafe.
 ## Requirements
 
 - Thunderbird 128 or newer
-- A TypeSafe API key from https://typesafe.ai (usage is billed by TypeSafe)
+- A TypeSafe API key from https://typesafe.ai, or an OpenRouter API key from https://openrouter.ai
 
-Nothing is sent until you allow it in the JevIt manager. Mail content goes only to TypeSafe. See the privacy policy in [LISTING.md](LISTING.md).
+Nothing is sent until you allow it in the JevIt manager and save the connection. Mail content goes to your configured API service; OpenRouter forwards it to TypeSafe. See the privacy policy in [LISTING.md](LISTING.md).
+
+## Connect through OpenRouter
+
+In the JevIt manager, configure **Connection**:
+
+1. Set **API base URL** to `https://openrouter.ai/api`.
+2. Read the data-sharing notice and tick consent for the configured API service.
+3. Enter your OpenRouter key in **API key**.
+4. Set **Model** to `jev-latest` or `typesafe/jev-1.13`.
+5. Click **Save** and allow access to `openrouter.ai` when Thunderbird asks.
+
+JevIt appends `/v1/systemone` to the base URL. OpenRouter supports the same
+request and response format as TypeSafe; see its [System One API documentation](https://openrouter.ai/docs/guides/community/typesafe-sdk).
+Use `https://openrouter.ai/api`, without `/v1`. This connection uses Jev's
+decision model, not `typesafe/jev-router` or the chat completions API.
+
+To use TypeSafe directly, set the base to `https://api.typesafe.ai` (the default).
+Other custom bases must use HTTPS and implement the System One API.
+Changing the base clears the key and consent in the form. Enter the key for the
+new service and save again. The saved connection remains active until you save;
+untick consent before editing the base if you want to stop new requests first.
+
+Scores are cached separately for each base URL. To classify previously tagged
+mail through the new service, untick **Skip already triaged mail**.
+Usage counters and the monthly budget remain shared across services; set the
+input-token price to match your provider. Costs are estimates.
+
+## Download a GitHub build
+
+The **Build extension** GitHub Actions workflow packages the extension on pushes
+and pull requests. It also supports **Run workflow** once the workflow is on the
+repository's default branch. It does not run tests or make API calls.
+
+1. Open the repository's **Actions** tab and select a successful **Build extension** run.
+2. Download the **jevit-xpi** artifact and extract `jevit-VERSION.xpi` from it.
+   `VERSION` is the version in `manifest.json`.
+3. In Thunderbird, open **Add-ons and Themes → gear → Install Add-on From File**
+   and select the `.xpi` file.
+
+The artifact is retained for 30 days. The workflow packages only the extension's
+runtime files and license; it does not publish a release or submit the add-on to
+addons.thunderbird.net.
 
 ## Development
 
