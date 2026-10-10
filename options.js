@@ -252,6 +252,24 @@ $("#resetUsage").onclick = async () => {
   $("#status").textContent = "Usage counters reset.";
 };
 
+$("#clearScores").onclick = async () => {
+  const button = $("#clearScores");
+  button.disabled = true;
+  $("#cacheStatus").textContent = "Clearing cached scores…";
+  try {
+    const stored = await messenger.storage.local.get(null);
+    const keys = Object.keys(stored).filter((key) => key.startsWith("score:"));
+    if (keys.length) await messenger.storage.local.remove(keys);
+    $("#cacheStatus").textContent = keys.length
+      ? `Cleared cached scores for ${keys.length} email record(s).`
+      : "No cached scores to clear.";
+  } catch (err) {
+    $("#cacheStatus").textContent = `Could not clear cached scores: ${err.message}`;
+  } finally {
+    button.disabled = false;
+  }
+};
+
 const blankRecipe = () =>
   ({ ...structuredClone(RECIPE_LIBRARY[0]), key: `jev_${Date.now()}`, name: "New recipe", color: NEW_RECIPE_COLORS[0], colorLight: NEW_RECIPE_COLORS[1], question: "Is `email` …?", yes: "", no: "" });
 
