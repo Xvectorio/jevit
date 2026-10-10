@@ -411,6 +411,28 @@ function htmlText(doc) {
   return doc.body.textContent;
 }
 
+// getFull() marks attachments with a name property, even when the name is empty.
+// Start below its synthetic message/rfc822 root and never descend into attachments:
+// only their names and types belong in the request, not an attached message's contents.
+function attachmentsFromMimeTree(message) {
+  if (!Array.isArray(message.parts) || message.decryptionStatus === "fail") {
+    throw new Error("Thunderbird did not return a readable MIME tree.");
+  }
+  const attachments = [];
+  const visit = (parts) => {
+    for (const part of parts) {
+      if (attachments.length >= MAX_ATTACHMENTS) return;
+      if (Object.hasOwn(part, "name")) {
+        attachments.push({ name: part.name, contentType: part.contentType });
+      } else if (!part.contentType?.startsWith("message/")) {
+        visit(part.parts ?? []);
+      }
+    }
+  };
+  visit(message.parts);
+  return attachments;
+}
+
 async function emailState(id, bodyChars) {
   const m = await messenger.messages.get(id);
   const parts = await messenger.messages.listInlineTextParts(id);
@@ -420,11 +442,31 @@ async function emailState(id, bodyChars) {
   const doc = html && new DOMParser().parseFromString(html.content, "text/html");
   const links = doc ? linkHosts([...doc.querySelectorAll("a[href]")].map((a) => ({ href: a.getAttribute("href"), text: a.textContent }))) : [];
   const body = plain ? plain.content : doc ? htmlText(doc) : "";
-  const attachments = (await messenger.messages.listAttachments(id)).slice(0, MAX_ATTACHMENTS)
+  let attachmentParts, full;
+  try {
+    attachmentParts = await messenger.messages.listAttachments(id);
+  } catch (err) {
+    // Thunderbird can fail to convert message/delivery-status as an attached message.
+    // getFull() exposes its metadata without going through that conversion.
+    try {
+      full = await messenger.messages.getFull(id);
+      attachmentParts = attachmentsFromMimeTree(full);
+    } catch (fallbackError) {
+      throw new Error(`Could not read attachments: listAttachments: ${err.message}; getFull fallback: ${fallbackError.message}`, { cause: fallbackError });
+    }
+  }
+  const attachments = attachmentParts.slice(0, MAX_ATTACHMENTS)
     .map((a) => `${a.name ?? ""} (${a.contentType})`.slice(0, 200));
   const identity = m.folder ? await messenger.identities.getDefault(m.folder.accountId) : null;
   // Only the topmost header: your own mail server adds it, lower ones can be forged by the sender.
-  const { headers } = await messenger.messages.getFull(id);
+  if (!full) {
+    try {
+      full = await messenger.messages.getFull(id);
+    } catch (err) {
+      throw new Error(`Could not read message headers (getFull): ${err.message}`, { cause: err });
+    }
+  }
+  const { headers } = full;
   const header = (name) => headers[name]?.[0]?.slice(0, HEADER_CHARS);
   // Everything the sender writes is capped: this ends up in every request, and in examples that ride along in later ones.
   const cut = (text = "") => text.slice(0, HEADER_CHARS);
