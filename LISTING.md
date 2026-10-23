@@ -48,7 +48,7 @@ Mozilla Public License 2.0 (MPL-2.0)
 ## Privacy policy
 **JevIt privacy policy**
 
-JevIt is a Thunderbird add-on that classifies email with TypeSafe's Jev model. This policy describes what data the add-on handles.
+JevIt is a Thunderbird add-on that classifies email with TypeSafe's Jev model, through the service you pick: TypeSafe, OpenRouter (which can also serve models from other providers), or an Open-Jev server on your own computer. This policy describes what data the add-on handles.
 
 **What is sent, and to whom.** You pick one service in the JevIt manager: TypeSafe (https://api.typesafe.ai, the default), OpenRouter (https://openrouter.ai), or an Open-Jev server on your own computer (http://127.0.0.1). Only after you tick "JevIt may send the content of emails I triage to …", which names who receives the mail, JevIt sends the following to that service, for each email you triage. TypeSafe and OpenRouter are reached over an encrypted HTTPS connection; Open-Jev on the same computer, without leaving it:
 - the email's sender, recipients (To and CC), subject, and text body. Quoted replies, styling and link paths are removed, and the body is limited to 3000 characters (adjustable in the manager).

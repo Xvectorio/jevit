@@ -38,7 +38,7 @@ A Thunderbird 128+ MailExtension (Manifest V2) in plain JavaScript: no build ste
 | `background.js` | Triage runs (4 mails in parallel), context menus, auto-triage of new mail, toolbar progress, update migration |
 | `options.*` | The JevIt manager: connection, budget, recipes, backup export and import |
 | `popup.*` | Jev's scores for the open email, to correct and apply |
-| `test.js` | Node logic tests with stubbed `messenger` and `fetch`; a live check against Jev with `TYPESAFE_API_KEY` |
+| `test.js` | Node logic tests with stubbed `messenger` and `fetch`; a live check against Jev with `TYPESAFE_API_KEY` or `OPENROUTER_API_KEY` |
 
 **Classification.** Each email is one System One request with one JSON state, to the service you pick:
 TypeSafe (`api.typesafe.ai/v1/systemone`, the default), OpenRouter (`openrouter.ai/api/v1/systemone`) or a local Open-Jev server (`127.0.0.1:<port>/v1/systemone`).
