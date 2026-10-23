@@ -18,7 +18,7 @@ const ACTIONS = {
 const movesMail = (action) => action === "move" || action === "junkmove";
 // recipe.folder is a folder id, or EVERY_ACCOUNT + name: "the folder with that name in the mail's own account".
 const EVERY_ACCOUNT = "*:";
-const TRIAGED = { key: "jev_triaged", name: "Triaged" }; // tag on every mail Jev has judged; colour is a setting
+const TRIAGED = { key: "jev_triaged", name: "Triaged" }; // tag on every mail Jev has judged; name and colour are settings
 // Mail Jev was unsure about, to review and teach from. Amber: 11:1 on a dark background, 5.9:1 on white.
 const UNSURE = { key: "jev_unsure", name: "Unsure", color: "#FFC857", colorLight: "#8A5A00" };
 
@@ -142,6 +142,7 @@ const DEFAULTS = {
   triagedTag: true, // tag every judged mail Triaged. Thunderbird fills a selected row with its first tag's colour, so off keeps untouched mail looking as before
   excludedAccounts: [], // account ids whose mail is never sent to Jev
   colorScheme: "auto", // tag colour set: "auto" follows Thunderbird's theme, or "light" / "dark"
+  triagedName: TRIAGED.name, // the Triaged tag's name in Thunderbird; renaming it there is undone by the next tag sync
   triagedColor: "#FFFFFF", // close to Thunderbird's own text colour, so triaged mail looks as before
   triagedColorLight: "#000000",
   budget: 1, // USD per calendar month; 0 = no limit
@@ -536,7 +537,7 @@ const colorFor = (r, scheme) => (scheme === "light" ? r.colorLight ?? defaultCol
 // " (JevIt)" added to its tag's name.
 async function syncTags(settings) {
   const scheme = activeScheme(settings);
-  const triaged = { ...TRIAGED, color: settings.triagedColor, colorLight: settings.triagedColorLight };
+  const triaged = { ...TRIAGED, name: settings.triagedName.trim() || TRIAGED.name, color: settings.triagedColor, colorLight: settings.triagedColorLight };
   const existing = new Map((await messenger.messages.tags.list()).map((t) => [t.key, t]));
   for (const r of [...settings.recipes, ...(settings.triagedTag ? [triaged] : []), ...(settings.unsureMargin > 0 ? [UNSURE] : [])]) {
     const color = colorFor(r, scheme).toUpperCase();

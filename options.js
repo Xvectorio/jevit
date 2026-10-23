@@ -20,6 +20,7 @@ function read() {
   s.skipTriaged = $("#skipTriaged").checked;
   s.excludedAccounts = [...document.querySelectorAll("#excludedAccounts input:checked")].map((c) => c.value);
   s.triagedTag = $("#triagedTag").checked;
+  s.triagedName = $("#triagedName").value.trim() || DEFAULTS.triagedName;
   s.triagedColor = $("#triagedColor").value;
   s.triagedColorLight = $("#triagedColorLight").value;
   s.colorScheme = $("#colorScheme").value;
@@ -51,6 +52,7 @@ function render() {
     return label;
   }));
   $("#triagedTag").checked = s.triagedTag;
+  $("#triagedName").value = s.triagedName;
   $("#triagedColor").value = s.triagedColor;
   $("#triagedColorLight").value = s.triagedColorLight;
   $("#colorScheme").value = s.colorScheme;

@@ -190,6 +190,14 @@ global.messenger = { folders: {
   calls.length = 0;
   await syncTags({ ...settings, recipes: [], unsureMargin: 0, triagedTag: false });
   assert.deepEqual(calls, [], "no Triaged tag created when it's turned off");
+  // The Triaged tag's name is a setting; a blank one falls back to "Triaged".
+  messenger.messages.tags.list = async () => [{ key: "jev_triaged", tag: "Triaged", color: "#000000" }];
+  messenger.messages.tags.update = async (key, p) => calls.push(["update", key, p.tag]);
+  await syncTags({ ...settings, recipes: [], unsureMargin: 0, triagedName: "Done" });
+  assert.deepEqual(calls, [["update", "jev_triaged", "Done"]]);
+  calls.length = 0;
+  await syncTags({ ...settings, recipes: [], unsureMargin: 0, triagedName: " " });
+  assert.deepEqual(calls, [], "blank name: Triaged");
 
   // Known senders: exact address in a contact, or a recipient in Sent; never your own address.
   global.messenger = {
