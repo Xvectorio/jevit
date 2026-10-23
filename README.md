@@ -38,10 +38,11 @@ A Thunderbird 128+ MailExtension (Manifest V2) in plain JavaScript: no build ste
 | `background.js` | Triage runs (4 mails in parallel), context menus, auto-triage of new mail, toolbar progress, update migration |
 | `options.*` | The JevIt manager: connection, budget, recipes, backup export and import |
 | `popup.*` | Jev's scores for the open email, to correct and apply |
-| `test.js` | Node logic tests with stubbed `messenger` and `fetch`; a live check against Jev with `TYPESAFE_API_KEY` |
+| `test.js` | Node logic tests with stubbed `messenger` and `fetch`; a live check against Jev with `TYPESAFE_API_KEY` or `OPENROUTER_API_KEY` |
 
-**Classification.** Each email is one request to `api.typesafe.ai/v1/systemone` with one JSON state:
-sender, To/Cc, subject, the cleaned body (3000 characters by default), the Authentication-Results, List-Unsubscribe and Reply-To headers,
+**Classification.** Each email is one System One request with one JSON state, to the service you pick:
+TypeSafe (`api.typesafe.ai/v1/systemone`, the default), OpenRouter (`openrouter.ai/api/v1/systemone`) or a local Open-Jev server (`127.0.0.1:<port>/v1/systemone`).
+The state holds the sender, To/Cc, subject, the cleaned body (3000 characters by default), the Authentication-Results, List-Unsubscribe and Reply-To headers,
 link text next to the host it really points to, attachment names and types, and your own address.
 Every recipe is a TypeSafe **Noul** (a yes/no probability) with yes/no criteria and up to 20 learned examples, all in the same request.
 A recipe matches at its threshold. Star, read, junk and move wait until Jev is at least 90% sure; near misses get the Unsure tag.
@@ -51,23 +52,24 @@ Rate limits (429/529) are retried with exponential backoff.
 - Every field the sender controls is capped (1000 characters per header, 20 recipients, 10 links, 10 attachments), so a sender can't inflate the request.
 - A sender only counts as known after a DMARC pass for the From domain, in the Authentication-Results header written by your own mail server (learned from recent Inbox mail). The address book and Sent-folder lookup is local.
 - Jev's scores are stored for 90 days, keyed by a SHA-256 of the email and of each question: triaging again and the popup are free, and only edited or taught recipes are asked again.
-- Usage is counted as input tokens × price against a monthly budget ($1 by default). Nothing is sent before you opt in, and whole accounts can be excluded.
+- Usage is counted as input tokens × price (or the cost OpenRouter reports) against a monthly budget ($1 by default). Nothing is sent before you opt in, and whole accounts can be excluded.
+- The services are a fixed list, so the manifest names every host mail can reach. Consent belongs to who receives the mail: a new service, or an OpenRouter model from another provider, unticks it. Each service has its own key and stored scores.
 
 Everything (API key, recipes, examples, usage, scores) stays in Thunderbird's `storage.local`. There is no server, telemetry or analytics.
 
 ## Requirements
 
 - Thunderbird 128 or newer
-- A TypeSafe API key from https://typesafe.ai (usage is billed by TypeSafe)
+- A TypeSafe API key from https://typesafe.ai, or an OpenRouter key from https://openrouter.ai/keys (usage is billed by that service), or an Open-Jev server on your computer
 
-Nothing is sent until you allow it in the JevIt manager. Mail content goes only to TypeSafe. See the privacy policy in [LISTING.md](LISTING.md).
+Nothing is sent until you allow it in the JevIt manager. Mail content goes only to the service you pick. With OpenRouter, mail goes to OpenRouter and to the provider of the model you select; their policies apply. See the privacy policy in [LISTING.md](LISTING.md).
 
 ## Development
 
 There's no build step. To try it, go to Add-ons → gear → Debug Add-ons → Load Temporary Add-on and pick `manifest.json`.
 
 ```sh
-node test.js      # logic tests; set TYPESAFE_API_KEY to also run the default recipes against Jev
+node test.js      # logic tests; set TYPESAFE_API_KEY or OPENROUTER_API_KEY to also run the default recipes against Jev
 zip jevit.xpi manifest.json LICENSE icon-*.png jev.js background.js popup.* options.* help.html style.css
 ```
 

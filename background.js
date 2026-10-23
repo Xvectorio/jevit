@@ -26,9 +26,7 @@ function logError(what, e) {
 
 async function triageList(list, manual) {
   const s = await loadSettings();
-  const missing = !s.apiKey ? "no TypeSafe API key is set"
-    : !s.consent ? "sending mail to TypeSafe is not allowed yet"
-    : ""; // a used-up budget halts in classify(), once a mail needs a request: stored scores are still free
+  const missing = connectionProblem(s); // a used-up budget halts in classify(), once a mail needs a request: stored scores are still free
   if (missing) return notify(`Can't triage with Jev: ${missing}. Click here to open the JevIt manager.`, manual);
   await syncTags(s);
   let failed = 0, skipped = 0, excluded = 0, judged = 0, free = 0, review = 0, firstError, halted, stopped;
@@ -48,12 +46,12 @@ async function triageList(list, manual) {
         try {
           // Only for mail you pick: new mail can't have been triaged yet, so a Triaged tag on it didn't come from JevIt.
           // The tag can be turned off, so stored scores count too (for SCORE_DAYS). Inside try: one unreadable mail fails alone.
-          if (manual && s.skipTriaged && (m.tags.includes(TRIAGED.key) || (await judgedBefore(m.id, s.bodyChars, s.endpoint)))) {
+          if (manual && s.skipTriaged && (m.tags.includes(TRIAGED.key) || (await onMessage(m, (id) => judgedBefore(id, s.bodyChars, s.endpoint))))) {
             skipped++;
             continue;
           }
-          const { keys, answers, act, unsure, paid } = await classify(m.id, s);
-          await applyRecipes(m.id, s.recipes, keys, answers, s.triagedTag, { act, unsure });
+          const { keys, answers, act, unsure, paid } = await onMessage(m, (id) => classify(id, s));
+          await onMessage(m, (id) => applyRecipes(id, s.recipes, keys, answers, s.triagedTag, { act, unsure }));
           judged++, free += !paid, review += unsure;
           for (const k of keys) matched.set(k, (matched.get(k) ?? 0) + 1);
         } catch (e) {

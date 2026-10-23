@@ -7,7 +7,8 @@ $("#help").onclick = () => messenger.tabs.create({ url: "help.html" });
 
 (async () => {
   settings = await loadSettings();
-  if (!settings.apiKey || !settings.consent) return status("Set your TypeSafe API key and allow sending mail under “Manage recipes…”.");
+  const problem = connectionProblem(settings);
+  if (problem) return status(`Can't ask Jev: ${problem}. Fix it under “Manage recipes…”.`);
   const [tab] = await messenger.tabs.query({ active: true, currentWindow: true });
   const shown = await messenger.messageDisplay.getDisplayedMessages(tab.id);
   const msg = (shown.messages ?? shown)[0];

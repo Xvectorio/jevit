@@ -15,22 +15,34 @@
   <main>
     <section class="card">
       <h2>Connection</h2>
+      <div class="grid2">
+        <label title="Where JevIt sends mail to be judged. Changing it saves at once and unticks the consent box below: nothing goes to the new service until you allow it. Each service keeps its own API key.">Service
+          <select id="service">
+            <option value="typesafe">TypeSafe</option>
+            <option value="openrouter">OpenRouter</option>
+            <option value="local">Open-Jev on this computer</option>
+          </select>
+        </label>
+        <label id="portRow" title="The port your local Open-Jev server listens on, at 127.0.0.1. Saved when you leave the field.">Open-Jev port
+          <input type="number" id="port" min="1" max="65535" step="1">
+        </label>
+      </div>
       <div class="consent">
         <p>To classify an email, JevIt sends its <b>sender, recipients, subject and text</b> (up to the text limit below), its authentication results, unsubscribe link and Reply-To address, the text and host name of its links, the names of its attachments (not their contents), your address,
-          and your recipes with their learned examples to <b>TypeSafe (api.typesafe.ai)</b>, using your own API key.
+          and your recipes with their learned examples to <b id="receiver"></b>, using your own API key. <span id="receiverPolicy"></span>
           This only happens for mail you triage: new mail if automatic triage is on, or mail you pick.
           Nothing is sent to the JevIt author. JevIt is not affiliated with TypeSafe.</p>
-        <label class="check" title="Required before JevIt sends anything to TypeSafe. Untick to stop all requests at once."><input type="checkbox" id="consent"> JevIt may send the content of emails I triage to TypeSafe</label>
+        <label class="check" title="Required before JevIt sends anything. Untick to stop all requests at once. Changing the service, or picking a model from another provider, unticks it."><input type="checkbox" id="consent"> JevIt may send the content of emails I triage to <span id="receiverShort"></span></label>
         <p class="hint">Nothing is sent until you tick this. Without it, JevIt can't triage mail. Untick at any time to stop all requests.</p>
       </div>
       <div class="grid2">
-        <label title="Your own key from typesafe.ai. Saved when you leave the field, and never included in backups.">TypeSafe API key
+        <label id="keyRow"><span id="keyLabel"></span>
           <input type="password" id="apiKey" autocomplete="off" spellcheck="false">
           <span class="hint warn" id="keyHint"></span>
         </label>
-        <label title="Which Jev version answers. jev-latest follows new releases; a pinned version keeps results stable.">Model
+        <label title="Which model answers. jev-latest follows new releases; a pinned version keeps results stable. Saved when you leave the field.">Model
           <input type="text" id="model" spellcheck="false">
-          <span class="hint">jev-latest, or pin a version (e.g. jev-1.13.0) once thresholds are tuned</span>
+          <span class="hint" id="modelHint"></span>
         </label>
         <label title="How much of an email's text is sent to Jev, after quoted replies, styling and link paths are removed. Less sends less of your mail, but Jev may miss details further down.">Text limit (characters)
           <input type="number" id="bodyChars" min="0" step="500">
@@ -87,16 +99,16 @@
           <input type="number" id="budget" min="0" step="0.5">
           <span class="hint">0 = no limit. When it's reached, JevIt stops asking Jev until next month.</span>
         </label>
-        <label title="Used to estimate cost from the token counts Jev reports. Change it if TypeSafe's price changes.">Price per million input tokens (USD)
+        <label title="Used to estimate cost from the token counts Jev reports. Change it if TypeSafe's price changes. OpenRouter reports each request's cost itself, so this isn't used there.">Price per million input tokens (USD)
           <input type="number" id="pricePerMtok" min="0" step="0.001">
-          <span class="hint">Jev 1.13: $0.042; output tokens are free. Check typesafe.ai for current prices.</span>
+          <span class="hint">Jev 1.13 at TypeSafe: $0.042; output tokens are free. OpenRouter reports its own cost.</span>
         </label>
       </div>
       <div class="toolbar">
-        <span class="hint">Estimated from the token counts Jev returns. Your TypeSafe bill is what counts.</span>
+        <span class="hint">Estimated from the token counts Jev returns. Your bill from TypeSafe or OpenRouter is what counts.</span>
         <span class="spacer"></span>
         <button id="forgetScores" title="Delete Jev's stored scores for all mail, so the next triage asks Jev again (and costs again). Recipes, examples, settings, counters and tags are kept. Mail with the Triaged tag is still skipped while “Skip already triaged mail” is on.">Forget stored scores</button>
-        <button id="resetUsage" title="Set this month's and all-time counters to zero. Doesn't change your TypeSafe bill.">Reset counters</button>
+        <button id="resetUsage" title="Set this month's and all-time counters to zero. Doesn't change your bill.">Reset counters</button>
       </div>
     </section>
 
