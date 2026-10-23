@@ -69,7 +69,7 @@ Nothing is sent until you allow it in the JevIt manager. Mail content goes only 
 There's no build step. To try it, go to Add-ons → gear → Debug Add-ons → Load Temporary Add-on and pick `manifest.json`.
 
 ```sh
-node test.js      # logic tests; set TYPESAFE_API_KEY to also run the default recipes against Jev
+node test.js      # logic tests; set TYPESAFE_API_KEY or OPENROUTER_API_KEY to also run the default recipes against Jev
 zip jevit.xpi manifest.json LICENSE icon-*.png jev.js background.js popup.* options.* help.html style.css
 ```
 
