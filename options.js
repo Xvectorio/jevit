@@ -29,6 +29,7 @@ function read() {
   s.bodyChars = Number($("#bodyChars").value);
   s.actSure = Number($("#actSure").value);
   s.unsureMargin = Number($("#unsureMargin").value);
+  s.unsureName = $("#unsureName").value.trim() || DEFAULTS.unsureName;
   document.querySelectorAll("#recipes fieldset").forEach((fs, i) => {
     for (const f of FIELDS) s.recipes[i][f] = fs.elements[f].value.trim();
     s.recipes[i].threshold = Number(fs.elements.threshold.value);
@@ -65,6 +66,7 @@ function render() {
   $("#bodyChars").value = s.bodyChars;
   $("#actSure").value = s.actSure;
   $("#unsureMargin").value = s.unsureMargin;
+  $("#unsureName").value = s.unsureName;
   showUsage();
   $("#recipes").replaceChildren(
     ...s.recipes.map((r, i) => {

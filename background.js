@@ -178,7 +178,7 @@ const resyncTags = async () => syncTags(await loadSettings()).catch((e) => logEr
 messenger.storage.onChanged.addListener((changes) => {
   if (changes.recipes) buildMenus();
   if ("budget" in changes || "usage" in changes) showBudgetBadge().catch(console.error);
-  if (["recipes", "colorScheme", "triagedName", "triagedColor", "triagedColorLight"].some((k) => k in changes)) resyncTags();
+  if (["recipes", "colorScheme", "triagedName", "triagedColor", "triagedColorLight", "unsureName"].some((k) => k in changes)) resyncTags();
 });
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", resyncTags);
 buildMenus();

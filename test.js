@@ -198,6 +198,9 @@ global.messenger = { folders: {
   calls.length = 0;
   await syncTags({ ...settings, recipes: [], unsureMargin: 0, triagedName: " " });
   assert.deepEqual(calls, [], "blank name: Triaged");
+  messenger.messages.tags.list = async () => [{ key: "jev_unsure", tag: "Unsure", color: "#8A5A00" }];
+  await syncTags({ ...settings, recipes: [], triagedTag: false, unsureName: "Check me" });
+  assert.deepEqual(calls, [["update", "jev_unsure", "Check me"]]);
 
   // Known senders: exact address in a contact, or a recipient in Sent; never your own address.
   global.messenger = {

@@ -19,7 +19,7 @@ const movesMail = (action) => action === "move" || action === "junkmove";
 // recipe.folder is a folder id, or EVERY_ACCOUNT + name: "the folder with that name in the mail's own account".
 const EVERY_ACCOUNT = "*:";
 const TRIAGED = { key: "jev_triaged", name: "Triaged" }; // tag on every mail Jev has judged; name and colour are settings
-// Mail Jev was unsure about, to review and teach from. Amber: 11:1 on a dark background, 5.9:1 on white.
+// Mail Jev was unsure about, to review and teach from; the name is a setting. Amber: 11:1 on a dark background, 5.9:1 on white.
 const UNSURE = { key: "jev_unsure", name: "Unsure", color: "#FFC857", colorLight: "#8A5A00" };
 
 // Tag colours as [dark theme, light theme]. Thunderbird colours the message row text with the tag colour,
@@ -150,6 +150,7 @@ const DEFAULTS = {
   bodyChars: 3000, // most of the body sent to Jev, after cleanup; the signal is usually near the top
   actSure: 0.9, // a match below this only tags: star, mark read, junk and move wait until Jev is this sure. 0 = always act
   unsureMargin: 0.15, // mail this close under a recipe's threshold gets the Unsure tag. 0 = no Unsure tag
+  unsureName: UNSURE.name,
   recipes: RECIPE_LIBRARY.slice(0, 5),
 };
 
@@ -532,14 +533,16 @@ const activeScheme = (settings) =>
 // A recipe's tag colour in a scheme. Recipes saved before light colours existed use the default light colour.
 const colorFor = (r, scheme) => (scheme === "light" ? r.colorLight ?? defaultColors(r.key)[1] : r.color);
 
-// Create missing JevIt tags and give every JevIt tag its name and colour for the active scheme.
+// Create missing JevIt tags and give every JevIt tag its name and colour for the active scheme. Names come from
+// the recipes and settings, so a rename in Thunderbird's own tag settings is undone here.
 // Thunderbird refuses two tags with one name, so a recipe named like another tag (such as one of your own) gets
 // " (JevIt)" added to its tag's name.
 async function syncTags(settings) {
   const scheme = activeScheme(settings);
   const triaged = { ...TRIAGED, name: settings.triagedName.trim() || TRIAGED.name, color: settings.triagedColor, colorLight: settings.triagedColorLight };
   const existing = new Map((await messenger.messages.tags.list()).map((t) => [t.key, t]));
-  for (const r of [...settings.recipes, ...(settings.triagedTag ? [triaged] : []), ...(settings.unsureMargin > 0 ? [UNSURE] : [])]) {
+  const unsure = { ...UNSURE, name: settings.unsureName.trim() || UNSURE.name };
+  for (const r of [...settings.recipes, ...(settings.triagedTag ? [triaged] : []), ...(settings.unsureMargin > 0 ? [unsure] : [])]) {
     const color = colorFor(r, scheme).toUpperCase();
     const taken = [...existing.values()].some((t) => t.key !== r.key && t.tag.toLowerCase() === r.name.toLowerCase());
     const name = taken ? `${r.name} (JevIt)` : r.name;
