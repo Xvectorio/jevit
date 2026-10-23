@@ -45,13 +45,13 @@ async function triageList(list, manual) {
           excluded++;
           continue;
         }
-        // Only for mail you pick: new mail can't have been triaged yet, so a Triaged tag on it didn't come from JevIt.
-        // The tag can be turned off, so stored scores count too (for SCORE_DAYS).
-        if (manual && s.skipTriaged && (m.tags.includes(TRIAGED.key) || (await judgedBefore(m.id, s.bodyChars)))) {
-          skipped++;
-          continue;
-        }
         try {
+          // Only for mail you pick: new mail can't have been triaged yet, so a Triaged tag on it didn't come from JevIt.
+          // The tag can be turned off, so stored scores count too (for SCORE_DAYS). Inside try: one unreadable mail fails alone.
+          if (manual && s.skipTriaged && (m.tags.includes(TRIAGED.key) || (await judgedBefore(m.id, s.bodyChars, s.endpoint)))) {
+            skipped++;
+            continue;
+          }
           const { keys, answers, act, unsure, paid } = await classify(m.id, s);
           await applyRecipes(m.id, s.recipes, keys, answers, s.triagedTag, { act, unsure });
           judged++, free += !paid, review += unsure;

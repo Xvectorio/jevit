@@ -188,13 +188,14 @@ function questionsFor(recipes) {
 // changing a threshold. A score belongs to the exact email Jev saw and the exact question (model, recipe question,
 // criteria and examples): editing or teaching a recipe makes its old scores stale. Keyed by a hash of the email,
 // not its Message-ID: the sender picks that, and could borrow the scores of mail you trust.
+// Another endpoint (a local Open-Jev server) keeps its own scores; TypeSafe's keep their original keys.
 // Kept for SCORE_DAYS after Jev was last asked about the email (reuse doesn't extend it); pruneScores() runs at startup.
 const SCORE_DAYS = 90;
 const digest = async (value) => {
   const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(value)));
   return [...new Uint8Array(bytes).slice(0, 16)].map((b) => b.toString(16).padStart(2, "0")).join("");
 };
-const scoreKey = async (state) => `score:${await digest(state)}`;
+const scoreKey = async (state, endpoint) => `score:${await digest(!endpoint || endpoint === JEV_API ? state : [endpoint, state])}`;
 const questionSigs = (recipes, model) => Promise.all(recipes.map((r) => digest([model, questionFor(r)])));
 
 // Answers from stored scores, and the recipes Jev still has to be asked. `sigs` from questionSigs(recipes).
@@ -208,7 +209,7 @@ function reuse(recipes, sigs, stored = {}) {
 const remember = (recipes, sigs, answers) =>
   Object.fromEntries(recipes.flatMap((r, i) => (typeof answers[r.key]?.noul === "number" ? [[sigs[i], answers[r.key].noul]] : [])));
 
-// Remove stored scores older than SCORE_DAYS. Entries without a time count as old.
+// Remove stored scores older than SCORE_DAYS. Entries without a time count as old; pruneScores(Infinity) removes all.
 async function pruneScores(now = Date.now()) {
   const all = await messenger.storage.local.get(null);
   const old = Object.keys(all).filter((k) => k.startsWith("score:") && !(now - all[k]?.at < SCORE_DAYS * 864e5));
@@ -334,6 +335,7 @@ async function askJev({ apiKey, model, endpoint }, state, questions) {
   for (let attempt = 0; ; attempt++) {
     const r = await fetch(endpoint || JEV_API, {
       method: "POST",
+      redirect: "error", // mail and key go to this endpoint only, never on to where it redirects
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({ model, state, questions }),
     });
@@ -391,6 +393,11 @@ function htmlText(doc) {
   return doc.body.textContent;
 }
 
+// Attachments in getFull()'s MIME tree, for when listAttachments() fails. Attachments have a name (maybe empty).
+// An attached message is listed but not entered: only names and types are sent, never its contents.
+const mimeAttachments = (parts = []) =>
+  parts.flatMap((p) => (Object.hasOwn(p, "name") || p.contentType?.startsWith("message/") ? [p] : mimeAttachments(p.parts)));
+
 async function emailState(id, bodyChars) {
   const m = await messenger.messages.get(id);
   const parts = await messenger.messages.listInlineTextParts(id);
@@ -400,11 +407,16 @@ async function emailState(id, bodyChars) {
   const doc = html && new DOMParser().parseFromString(html.content, "text/html");
   const links = doc ? linkHosts([...doc.querySelectorAll("a[href]")].map((a) => ({ href: a.getAttribute("href"), text: a.textContent }))) : [];
   const body = plain ? plain.content : doc ? htmlText(doc) : "";
-  const attachments = (await messenger.messages.listAttachments(id)).slice(0, MAX_ATTACHMENTS)
-    .map((a) => `${a.name ?? ""} (${a.contentType})`.slice(0, 200));
+  const full = await messenger.messages.getFull(id);
+  // Thunderbird can fail to list a bounce's attachments (message/delivery-status); the MIME tree still has them.
+  const listed = await messenger.messages.listAttachments(id).catch((e) => {
+    if (!full.parts) throw e;
+    return mimeAttachments(full.parts);
+  });
+  const attachments = listed.slice(0, MAX_ATTACHMENTS).map((a) => `${a.name ?? ""} (${a.contentType})`.slice(0, 200));
   const identity = m.folder ? await messenger.identities.getDefault(m.folder.accountId) : null;
   // Only the topmost header: your own mail server adds it, lower ones can be forged by the sender.
-  const { headers } = await messenger.messages.getFull(id);
+  const { headers } = full;
   const header = (name) => headers[name]?.[0]?.slice(0, HEADER_CHARS);
   // Everything the sender writes is capped: this ends up in every request, and in examples that ride along in later ones.
   const cut = (text = "") => text.slice(0, HEADER_CHARS);
@@ -420,8 +432,8 @@ async function emailState(id, bodyChars) {
 }
 
 // Has Jev judged this exact email before (stored scores, kept SCORE_DAYS)? Works without the Triaged tag.
-async function judgedBefore(id, bodyChars) {
-  const key = await scoreKey(await emailState(id, bodyChars));
+async function judgedBefore(id, bodyChars, endpoint) {
+  const key = await scoreKey(await emailState(id, bodyChars), endpoint);
   return !!(await messenger.storage.local.get(key))[key];
 }
 
@@ -431,7 +443,7 @@ async function classify(id, settings) {
   const { consent, budget } = await messenger.storage.local.get({ consent: DEFAULTS.consent, budget: DEFAULTS.budget });
   if (!consent) throw new Error("Allow sending mail to TypeSafe first (JevIt manager, top of the page).", { cause: "halt" });
   const state = await emailState(id, settings.bodyChars);
-  const key = await scoreKey(state);
+  const key = await scoreKey(state, settings.endpoint);
   const [sigs, stored] = await Promise.all([questionSigs(settings.recipes, settings.model), messenger.storage.local.get(key).then((o) => o[key])]);
   const { answers: kept, missing } = reuse(settings.recipes, sigs, stored);
   // Only a request costs money: stored scores are reused even when the budget is used up.

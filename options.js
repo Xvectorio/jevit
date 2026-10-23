@@ -239,6 +239,11 @@ $("#spamKnown").onchange = (e) => {
   render();
   $("#status").textContent = "Click Save to keep it.";
 };
+$("#forgetScores").onclick = async () => {
+  await pruneScores(Infinity);
+  $("#status").textContent = "Stored scores forgotten.";
+};
+
 $("#resetUsage").onclick = async () => {
   await messenger.storage.local.remove("usage");
   $("#status").textContent = "Usage counters reset.";

@@ -266,10 +266,23 @@ global.messenger = { folders: {
   assert.deepEqual([big.from.length, big.subject.length, big.to.length, big.to[0].length, big.cc], [1000, 1000, 20, 1000, []]);
   assert.deepEqual([big.attachments.length, big.attachments[0].length, big.headers["Reply-To"].length, big.links], [10, 200, 1000, []]);
 
+  // A bounce Thunderbird can't list attachments for: names and types come from the MIME tree, attached mail isn't entered.
+  messenger.messages.listAttachments = async () => { throw new Error("cannot convert message/delivery-status"); };
+  messenger.messages.getFull = async () => ({ headers: {}, contentType: "message/rfc822", parts: [{ contentType: "multipart/report", parts: [
+    { contentType: "text/plain" },
+    { contentType: "message/delivery-status" },
+    { contentType: "message/rfc822", parts: [{ contentType: "application/pdf", name: "inner.pdf" }] },
+    { contentType: "multipart/mixed", parts: [{ contentType: "image/png", name: "" }] },
+  ] }] });
+  assert.deepEqual((await emailState(1, 3000)).email.attachments, [" (message/delivery-status)", " (message/rfc822)", " (image/png)"]);
+  messenger.messages.getFull = async () => ({ headers: {} });
+  await assert.rejects(emailState(1, 3000), /delivery-status/, "no MIME tree: the original error");
+
   // Stored scores: asking again is free; only recipes whose question changed (edited, taught) go to Jev again.
   const local = { consent: true, budget: 1 };
   let body = "Claim your prize", asked = [], urls = [];
-  global.fetch = async (url, { body: req }) => {
+  global.fetch = async (url, { body: req, redirect }) => {
+    assert.equal(redirect, "error", "mail never follows a redirect");
     const { questions } = JSON.parse(req);
     asked.push(Object.keys(questions));
     urls.push(url);
@@ -297,8 +310,16 @@ global.messenger = { folders: {
   assert.deepEqual(asked[1], ["jev_spam"], "a taught recipe is asked again, the other reused");
   assert.equal(urls[0], "https://api.typesafe.ai/v1/systemone", "TypeSafe by default");
   addExample(s2.recipes[0], email, false);
-  await classify(1, { ...s2, endpoint: "http://127.0.0.1:8791/v1/systemone" });
-  assert.equal(urls[2], "http://127.0.0.1:8791/v1/systemone", "a local Open-Jev endpoint is used when set");
+  await classify(1, s2);
+  const openJev = "http://127.0.0.1:8791/v1/systemone";
+  const typesafeKeys = Object.keys(local).filter((k) => k.startsWith("score:"));
+  await classify(1, { ...s2, endpoint: openJev });
+  assert.equal(urls[3], openJev, "a local Open-Jev endpoint is used when set");
+  assert.deepEqual(asked[3], ["jev_spam", "jev_reply"], "TypeSafe's scores aren't reused for another endpoint");
+  const [openJevKey] = Object.keys(local).filter((k) => k.startsWith("score:") && !typesafeKeys.includes(k));
+  assert.ok(openJevKey, "another endpoint's scores are stored apart");
+  assert.equal(await judgedBefore(1, s2.bodyChars, openJev), true);
+  delete local[openJevKey];
   local.budget = 0.00001;
   assert.deepEqual((await classify(1, s2)).keys, ["jev_spam", "jev_reply"], "stored scores still work when the budget is used up");
   body = "Claim your prize now";
@@ -314,6 +335,8 @@ global.messenger = { folders: {
   messenger.storage.local.remove = async (keys) => keys.forEach((k) => delete local[k]);
   await pruneScores();
   assert.deepEqual(Object.keys(local).filter((k) => k.startsWith("score:")), [scored], "old and undated scores removed, recent kept");
+  await pruneScores(Infinity);
+  assert.deepEqual(Object.keys(local).filter((k) => k.startsWith("score:")), [], "Forget stored scores removes all");
   assert.deepEqual(reuse(rs.slice(0, 2), ["a", "b"], { b: 0.4, c: 1 }), { answers: { jev_reply: { noul: 0.4 } }, missing: [rs[0]] });
   assert.deepEqual(remember(rs.slice(0, 2), ["a", "b"], { jev_spam: { noul: 0.9 } }), { a: 0.9 }, "only recipes with an answer");
   console.log("logic ok");
