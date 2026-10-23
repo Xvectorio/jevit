@@ -478,7 +478,7 @@ async function classify(id, settings) {
   if (now.endpoint !== settings.endpoint || now.model !== settings.model) {
     throw new Error("The service or model changed in the JevIt manager. Triage again to use it.", { cause: "halt" });
   }
-  const state = await emailState(id, settings.bodyChars);
+  const state = await emailState(id, settings.bodyChars).catch(during("Reading the mail"));
   const key = await scoreKey(state, settings.endpoint);
   const [sigs, stored] = await Promise.all([questionSigs(settings.recipes, settings.model), messenger.storage.local.get(key).then((o) => o[key])]);
   const { answers: kept, missing } = reuse(settings.recipes, sigs, stored);
@@ -564,12 +564,33 @@ async function knownSender(author) {
 async function applyRecipes(id, recipes, keys, answers, triaged = false, { act = keys, unsure = false } = {}) {
   const extra = [...(triaged ? [TRIAGED] : []), ...(unsure ? [UNSURE] : [])];
   const ours = new Set([...recipes.map((r) => r.key), UNSURE.key]);
-  const m = await messenger.messages.get(id);
+  const m = await messenger.messages.get(id).catch(during("Reading the mail"));
   const { update, folder } = plan(recipes, act, answers);
   const tags = new Set([...m.tags.filter((t) => !ours.has(t)), ...keys, ...extra.map((t) => t.key)]);
-  await messenger.messages.update(id, { ...update, tags: [...tags] });
+  await messenger.messages.update(id, { ...update, tags: [...tags] }).catch(during("Tagging the mail"));
   const target = folder && m.folder ? await resolveFolder(folder, m.folder.accountId) : folder;
-  if (target && target !== m.folder?.id) await messenger.messages.move([id], target);
+  if (target && target !== m.folder?.id) await messenger.messages.move([id], target).catch(during("Moving the mail"));
+}
+
+// The step that failed, in front of the error. Halts keep their own message and cause.
+const during = (step) => (e) => {
+  throw e?.cause === "halt" ? e : new Error(`${step}: ${e?.message ?? e}`, { cause: e?.cause });
+};
+
+// Runs fn(id) for a mail from a list. Thunderbird can drop a mail's id while Jev answers (an add-on restart, or the
+// header replaced); then the mail is found again by its Message-ID and fn runs once more. Only in the same folder:
+// mail moved meanwhile (to Trash, by a filter) is left alone, so a move recipe can't pull it back out.
+async function onMessage(m, fn) {
+  try {
+    return await fn(m.id);
+  } catch (e) {
+    if (!/Message not found/.test(e?.message) || !m.headerMessageId) throw e;
+    const { messages } = await messenger.messages.query({ headerMessageId: m.headerMessageId, folderId: m.folder?.id });
+    const again = messages.find((x) => x.folder?.id === m.folder?.id);
+    if (!again) throw new Error(`${e.message} It was moved or deleted while JevIt worked on it.`, { cause: e.cause });
+    m.id = again.id; // the next step uses the new id too
+    return fn(m.id);
+  }
 }
 
 // "light" or "dark": the chosen colour set, or Thunderbird's current theme when set to follow it.
@@ -624,5 +645,5 @@ async function* iterate(list) {
 }
 
 if (typeof module !== "undefined") {
-  module.exports = { JEV_API, OPENROUTER_API, localApi, serviceOf, receiver, connectionProblem, DEFAULTS, RECIPE_LIBRARY, cleanBody, linkHosts, updateRecipes, questionFor, questionsFor, reuse, remember, classify, judgedBefore, pruneScores, decide, certainty, dmarcPass, plan, addExample, draftRecipe, parseBackup, askJev, resolveFolder, applyRecipes, knownSender, emailState, authServId, trustedServer, addUsage, budgetLeft, money, syncTags, colorFor, activeScheme, PALETTE };
+  module.exports = { onMessage, JEV_API, OPENROUTER_API, localApi, serviceOf, receiver, connectionProblem, DEFAULTS, RECIPE_LIBRARY, cleanBody, linkHosts, updateRecipes, questionFor, questionsFor, reuse, remember, classify, judgedBefore, pruneScores, decide, certainty, dmarcPass, plan, addExample, draftRecipe, parseBackup, askJev, resolveFolder, applyRecipes, knownSender, emailState, authServId, trustedServer, addUsage, budgetLeft, money, syncTags, colorFor, activeScheme, PALETTE };
 }

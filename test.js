@@ -1,6 +1,6 @@
 // node test.js  (set TYPESAFE_API_KEY or OPENROUTER_API_KEY to also run the default recipes against Jev there)
 const assert = require("node:assert");
-const { JEV_API, OPENROUTER_API, localApi, serviceOf, receiver, connectionProblem, DEFAULTS, RECIPE_LIBRARY, cleanBody, linkHosts, updateRecipes, questionFor, questionsFor, reuse, remember, classify, judgedBefore, pruneScores, decide, certainty, dmarcPass, plan, addExample, draftRecipe, parseBackup, askJev, resolveFolder, applyRecipes, knownSender, emailState, authServId, trustedServer, addUsage, budgetLeft, money, syncTags, colorFor, activeScheme, PALETTE } = require("./jev.js");
+const { onMessage, JEV_API, OPENROUTER_API, localApi, serviceOf, receiver, connectionProblem, DEFAULTS, RECIPE_LIBRARY, cleanBody, linkHosts, updateRecipes, questionFor, questionsFor, reuse, remember, classify, judgedBefore, pruneScores, decide, certainty, dmarcPass, plan, addExample, draftRecipe, parseBackup, askJev, resolveFolder, applyRecipes, knownSender, emailState, authServId, trustedServer, addUsage, budgetLeft, money, syncTags, colorFor, activeScheme, PALETTE } = require("./jev.js");
 
 assert.equal(cleanBody("Hi\n> old quote\n\n\n\n  Bye  "), "Hi\n\nBye");
 assert.equal(cleanBody("x".repeat(9000)).length, 3000);
@@ -357,6 +357,26 @@ global.messenger = { folders: {
   assert.deepEqual(Object.keys(local).filter((k) => k.startsWith("score:")), [scored], "old and undated scores removed, recent kept");
   await pruneScores(Infinity);
   assert.deepEqual(Object.keys(local).filter((k) => k.startsWith("score:")), [], "Forget stored scores removes all");
+  // A mail's id gone stale while Jev answered: found again by Message-ID, in the same folder only.
+  const gone = () => Object.assign(new Error("Message not found: 93."), {});
+  let found = [], queried;
+  messenger.messages.query = async (q) => ((queried = q), { messages: found });
+  const mail = { id: 93, headerMessageId: "a@b", folder: { id: "f1" } };
+  found = [{ id: 7, folder: { id: "f1" } }];
+  const seen = [];
+  assert.equal(await onMessage(mail, async (id) => (seen.push(id), id === 93 ? Promise.reject(gone()) : "ok")), "ok");
+  assert.deepEqual([seen, mail.id, queried], [[93, 7], 7, { headerMessageId: "a@b", folderId: "f1" }], "retried once with the new id, kept for the next step");
+  found = [{ id: 8, folder: { id: "trash" } }];
+  await assert.rejects(onMessage({ ...mail, id: 93 }, async () => { throw gone(); }), /moved or deleted while JevIt worked on it/, "moved elsewhere: left alone");
+  await assert.rejects(onMessage(mail, async () => { throw new Error("Jev 500: x"); }), /^Error: Jev 500: x$/, "other errors pass through");
+  messenger.messages.update = async () => { throw gone(); };
+  messenger.messages.get = async () => ({ tags: [], folder: { id: "f1", accountId: "a" } });
+  await assert.rejects(applyRecipes(1, rs.slice(0, 1), [], {}), /^Error: Tagging the mail: Message not found: 93\.$/, "the error says which step failed");
+  local.consent = false;
+  messenger.storage.local.get = async (k) => Object.fromEntries(Object.entries(k).map(([key, d]) => [key, local[key] ?? d]));
+  await assert.rejects(classify(1, s2), (e) => e.cause === "halt" && !/Reading/.test(e.message), "a halt keeps its message and cause");
+  local.consent = true;
+
   assert.deepEqual(reuse(rs.slice(0, 2), ["a", "b"], { b: 0.4, c: 1 }), { answers: { jev_reply: { noul: 0.4 } }, missing: [rs[0]] });
   assert.deepEqual(remember(rs.slice(0, 2), ["a", "b"], { jev_spam: { noul: 0.9 } }), { a: 0.9 }, "only recipes with an answer");
   console.log("logic ok");
