@@ -13,6 +13,7 @@ const keepOpen = (el, set, key) => {
 
 // Pull form values back into `s` before any re-render or save.
 function read() {
+  s.endpoint = formEndpoint();
   s.apiKey = $("#apiKey").value.trim();
   s.consent = $("#consent").checked;
   s.model = $("#model").value.trim() || DEFAULTS.model;
@@ -38,10 +39,12 @@ function read() {
 }
 
 function render() {
+  $("#service").value = serviceOf(s.endpoint);
+  $("#port").value = serviceOf(s.endpoint) === "local" ? new URL(s.endpoint).port : LOCAL_PORT;
   $("#apiKey").value = s.apiKey;
   $("#consent").checked = s.consent;
-  showKeyHint();
   $("#model").value = s.model;
+  showConnection();
   $("#autoTriage").checked = s.autoTriage;
   $("#skipTriaged").checked = s.skipTriaged;
   $("#excludedAccounts").replaceChildren(...Object.entries(accounts).map(([id, name]) => {
@@ -167,25 +170,67 @@ function render() {
   ]);
 }
 
-// The key can only be entered after consent. Both save immediately, without Save:
-// unticking stops requests right away, and a typed key can't be lost to a failed Save.
+function formEndpoint() {
+  const port = Number($("#port").value);
+  const local = localApi(Number.isInteger(port) && port > 0 && port < 65536 ? port : LOCAL_PORT);
+  return { typesafe: JEV_API, openrouter: OPENROUTER_API, local }[$("#service").value];
+}
+
+const POLICIES = {
+  typesafe: "TypeSafe's terms and privacy policy apply.",
+  openrouter: "OpenRouter's policies apply, and those of the model's provider.",
+  local: "It stays on this computer, unless your Open-Jev server sends it on.",
+};
+const MODEL_HINTS = {
+  typesafe: "jev-latest, or pin a version (e.g. jev-1.13.0) once thresholds are tuned",
+  openrouter: "jev-latest or typesafe/jev-1.13. A model from another provider (openai/…) sends your mail there too.",
+  local: "The model name your Open-Jev server expects",
+};
+
+// Who receives mail and with which key, for the service and model in the form.
+function showConnection() {
+  const endpoint = formEndpoint(), service = serviceOf(endpoint), { name, keys } = SERVICES[service];
+  $("#portRow").hidden = service !== "local";
+  $("#receiver").textContent = $("#receiverShort").textContent = receiver(endpoint, $("#model").value.trim() || DEFAULTS.model);
+  $("#receiverPolicy").textContent = POLICIES[service];
+  $("#keyLabel").textContent = keys ? `${name} API key` : "Open-Jev key (only if your server needs one)";
+  $("#keyRow").title = `${keys ? `Your own key from ${keys}.` : "Only if your Open-Jev server asks for one."} Each service keeps its own key. Saved when you leave the field, and never included in backups.`;
+  $("#modelHint").textContent = MODEL_HINTS[service];
+  showKeyHint();
+}
+
+// The key can only be entered after consent.
 function showKeyHint() {
   const consent = $("#consent").checked;
   $("#apiKey").disabled = !consent;
   $("#keyHint").textContent = !consent
     ? "Tick the box above first to enter your API key."
-    : $("#apiKey").value.trim() ? "" : "No API key yet: JevIt can't triage until you add one.";
+    : $("#apiKey").value.trim() || serviceOf(formEndpoint()) === "local" ? "" : "No API key yet: JevIt can't triage until you add one.";
 }
+
+// The connection saves as it changes, without Save: unticking stops requests right away, a typed key can't be lost
+// to a failed Save, and consent stays with the receiver it was given for: a new service, or a model from another
+// provider, unticks it. Each service keeps its own key in `apiKeys`.
+const saveConnection = () => serial(async () => {
+  const stored = await messenger.storage.local.get({ endpoint: DEFAULTS.endpoint, model: DEFAULTS.model, apiKeys: {} });
+  const endpoint = formEndpoint(), model = $("#model").value.trim() || DEFAULTS.model, { apiKeys } = stored;
+  if (serviceOf(endpoint) !== serviceOf(stored.endpoint)) {
+    apiKeys[serviceOf(stored.endpoint)] = $("#apiKey").value.trim();
+    $("#apiKey").value = apiKeys[serviceOf(endpoint)] ?? "";
+  }
+  const moved = receiver(endpoint, model) !== receiver(stored.endpoint, stored.model);
+  if (moved) $("#consent").checked = false;
+  const apiKey = (apiKeys[serviceOf(endpoint)] = $("#apiKey").value.trim());
+  Object.assign(s, { endpoint, model, apiKey, consent: $("#consent").checked });
+  await messenger.storage.local.set({ endpoint, model, apiKey, apiKeys, consent: s.consent });
+  if (serviceOf(endpoint) === "local") $("#port").value = new URL(endpoint).port;
+  showConnection();
+  $("#status").textContent = moved ? `Mail would now go to ${receiver(endpoint, model)}: tick the box to allow it.` : "Connection saved.";
+  if (s.consent && !apiKey && serviceOf(endpoint) !== "local") $("#apiKey").focus();
+});
+for (const id of ["#service", "#port", "#model", "#apiKey", "#consent"]) $(id).onchange = saveConnection;
 $("#apiKey").oninput = showKeyHint;
-$("#apiKey").onchange = async (e) => {
-  await messenger.storage.local.set({ apiKey: e.target.value.trim() });
-  $("#status").textContent = "API key saved.";
-};
-$("#consent").onchange = async (e) => {
-  showKeyHint();
-  await messenger.storage.local.set({ consent: e.target.checked });
-  if (e.target.checked && !$("#apiKey").value.trim()) $("#apiKey").focus();
-};
+$("#model").oninput = showConnection;
 
 // Each account's mail server whose DMARC verdict JevIt trusts; detected when a known sender is first checked.
 async function showAuthServers() {

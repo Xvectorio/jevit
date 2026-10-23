@@ -26,9 +26,7 @@ function logError(what, e) {
 
 async function triageList(list, manual) {
   const s = await loadSettings();
-  const missing = !s.apiKey ? "no TypeSafe API key is set"
-    : !s.consent ? "sending mail to TypeSafe is not allowed yet"
-    : ""; // a used-up budget halts in classify(), once a mail needs a request: stored scores are still free
+  const missing = connectionProblem(s); // a used-up budget halts in classify(), once a mail needs a request: stored scores are still free
   if (missing) return notify(`Can't triage with Jev: ${missing}. Click here to open the JevIt manager.`, manual);
   await syncTags(s);
   let failed = 0, skipped = 0, excluded = 0, judged = 0, free = 0, review = 0, firstError, halted, stopped;

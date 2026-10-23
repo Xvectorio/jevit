@@ -23,6 +23,7 @@
     "notifications",
     "sensitiveDataUpload",
     "https://api.typesafe.ai/*",
+    "https://openrouter.ai/*",
     "http://127.0.0.1/*"
   ],
   "background": {

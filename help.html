@@ -39,12 +39,17 @@
       <h2>Getting started</h2>
       <ol>
         <li>Open the manager with the <b>JevIt</b> toolbar button (except while triage runs: then a click stops the run). It also opens by itself after installing.</li>
-        <li>Read <b>Data sent to TypeSafe</b> and tick <b>“JevIt may send the content of emails I triage to TypeSafe”</b>. Nothing is sent before you do.</li>
-        <li>Paste your <b>TypeSafe API key</b> (from typesafe.ai). It is saved when you leave the field.</li>
+        <li>Pick the <b>Service</b> that runs Jev: <b>TypeSafe</b> (the default), <b>OpenRouter</b>, or <b>Open-Jev on this computer</b>.</li>
+        <li>Read who receives your mail and tick <b>“JevIt may send the content of emails I triage to …”</b>. Nothing is sent before you do.</li>
+        <li>Paste your <b>API key</b> for that service (from typesafe.ai or openrouter.ai/keys; Open-Jev only needs one if your server asks). It is saved when you leave the field.</li>
         <li>Optional: tick <b>Automatically run recipes on new mail</b>, then click <b>Save</b>.</li>
         <li>Try it: open an email and click <b>JevIt</b> in the message header to see what Jev thinks.</li>
       </ol>
       <p>Five recipes are installed to start with: Spam, Needs reply, Newsletter, Invoice / receipt and Urgent. By default they only add a tag.</p>
+      <p><b>Services.</b> TypeSafe runs Jev itself. OpenRouter passes your mail on to the model's provider: TypeSafe for <code>jev-latest</code> or <code>typesafe/jev-1.13</code>,
+        or another company for a model like <code>openai/…</code>, and the consent text says so. Open-Jev runs on your own computer, at <code>127.0.0.1</code> and the port you set.
+        The service, key, model and consent box save as soon as you change them. Changing the service, or picking a model from another provider, unticks consent,
+        so nothing goes to a new receiver until you allow it. Each service keeps its own key, and its own stored scores.</p>
     </section>
 
     <section class="card" id="triage">
@@ -65,7 +70,7 @@
       <p><b>Jev's scores are remembered.</b> JevIt stores Jev's score for every email and recipe on your computer, for 90 days. Opening the header popup, or triaging an email again,
         reuses them for free, even when this month's budget is used up. Only a recipe you edited or taught since, or a new recipe, is sent to Jev again, and so is an email whose content changed.
         <b>Forget stored scores</b> (Usage &amp; budget section) deletes them all, so Jev is asked again; mail with the Triaged tag is still skipped unless you untick <b>Skip already triaged mail</b>.</p>
-      <p><b>Never send mail in account … to Jev</b> (Connection section, one per account): mail in a ticked account is never sent to TypeSafe,
+      <p><b>Never send mail in account … to Jev</b> (Connection section, one per account): mail in a ticked account is never sent to Jev,
         whether by automatic triage, selected-mail triage or the header popup. Most settings in the manager show a short explanation when you hover over them.</p>
     </section>
 
@@ -210,11 +215,11 @@
     <section class="card" id="usage">
       <h2>Usage and budget</h2>
       <p>JevIt counts every Jev request, the input tokens Jev reports, and the estimated cost, for this month and for all time.
-        TypeSafe charges only input tokens. Set the price per million tokens if TypeSafe's price changes.</p>
+        TypeSafe charges only input tokens. Set the price per million tokens if TypeSafe's price changes. OpenRouter reports what each request cost, and JevIt counts that instead.</p>
       <p>The <b>monthly budget</b> (default $1, which is roughly 10,000 emails) stops all Jev requests once it's used up, until next month or until you raise it.
         You'll get a notification, and the JevIt toolbar button shows a <b>$</b> badge until there's budget again.
         A triage that is running stops as soon as the budget is used up (also when you lower it below what's spent) or you untick consent.
-        Mail that arrives meanwhile isn't triaged: it has no Triaged tag, so you can find it and choose JevIt → Triage with Jev later. Set it to 0 for no limit. These are estimates: your TypeSafe bill is what counts.</p>
+        Mail that arrives meanwhile isn't triaged: it has no Triaged tag, so you can find it and choose JevIt → Triage with Jev later. Set it to 0 for no limit. These are estimates: your bill from TypeSafe or OpenRouter is what counts.</p>
     </section>
 
     <section class="card" id="backup">
@@ -237,8 +242,10 @@
     <section class="card" id="privacy">
       <h2>Privacy</h2>
       <ul>
-        <li>Only after you tick consent, and only for mail you triage, JevIt sends TypeSafe (api.typesafe.ai) the following, over HTTPS with your own key:
+        <li>Only after you tick consent, and only for mail you triage, JevIt sends the service you picked the following, with your own key:
           the sender, recipients, subject and text (quoted replies, styling and link paths removed, up to 3000 characters; change the text limit in the manager), the Authentication-Results, List-Unsubscribe and Reply-To headers, the text and host name of up to 10 links (never opened), the names and types of up to 10 attachments (never their contents), your address, and your recipes with their examples.</li>
+        <li>TypeSafe (api.typesafe.ai) and OpenRouter (openrouter.ai) are reached over HTTPS. With OpenRouter, mail goes to OpenRouter and to the provider of the model you select; their policies apply.
+          Open-Jev is reached on this computer (127.0.0.1) and stays there, unless your server sends it on.</li>
         <li>Nothing is sent to the JevIt author. There's no tracking or analytics.</li>
         <li>Your key, recipes, settings and usage counters stay in Thunderbird. The known-sender check runs locally.</li>
         <li>Untick consent to stop all requests immediately. JevIt is not affiliated with TypeSafe.</li>
