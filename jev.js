@@ -820,7 +820,15 @@ const colorFor = (r, scheme) => (scheme === "light" ? r.colorLight ?? defaultCol
 // the recipes and settings, so a rename in Thunderbird's own tag settings is undone here.
 // Thunderbird refuses two tags with one name, so a recipe named like another tag (such as one of your own) gets
 // " (JevIt)" added to its tag's name.
-async function syncTags(settings) {
+// One pass at a time (startup, settings changes and triage all start one): two passes that both find a tag missing
+// would both create it, and the second fails. A later pass runs last, so the latest settings win.
+let tagsSynced = Promise.resolve();
+function syncTags(settings) {
+  const pass = tagsSynced.then(() => syncTagsNow(settings));
+  tagsSynced = pass.catch(() => {}); // a failed pass is reported to its caller, not to the next one
+  return pass;
+}
+async function syncTagsNow(settings) {
   const scheme = activeScheme(settings);
   const triaged = { ...TRIAGED, name: settings.triagedName.trim() || TRIAGED.name, color: settings.triagedColor, colorLight: settings.triagedColorLight };
   const existing = new Map((await messenger.messages.tags.list()).map((t) => [t.key, t]));
