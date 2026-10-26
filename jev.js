@@ -241,7 +241,7 @@ function questionsFor(recipes) {
 // criteria and examples): editing or teaching a recipe makes its old scores stale. Keyed by a hash of the email,
 // not its Message-ID: the sender picks that, and could borrow the scores of mail you trust.
 // Another endpoint (OpenRouter, a local Open-Jev server) keeps its own scores; TypeSafe's keep their original keys.
-// Kept for SCORE_DAYS after Jev was last asked about the email (reuse doesn't extend it); pruneScores() runs at startup.
+// Kept for SCORE_DAYS after Jev was last asked about the email (reuse doesn't extend it); pruneScores() runs daily.
 const SCORE_DAYS = 90;
 const digest = async (value) => {
   const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(value)));

@@ -691,6 +691,15 @@ global.messenger = { folders: {
   answerWith = { noul: 0.95 };
   assert.match(await triage(), /^Triaged 1 mail\(s\): Newsletter 1\.$/, "asked again, not skipped");
   assert.deepEqual([done.requests, done.moves], [3, 3]);
+  // Scores past SCORE_DAYS go at the first triage a day after the last pruning, also when Thunderbird isn't restarted.
+  Object.assign(header, { folder: { id: "a:/INBOX", accountId: "a" }, tags: [] });
+  for (const [k, v] of Object.entries(page)) if (k.startsWith("score:")) v.at -= 91 * 864e5;
+  assert.match(await triage(), /Skipped 1 already triaged/, "within a day of the last pruning, the old score still counts");
+  const pageDate = vm.runInContext("Date", ctx), today = pageDate.now;
+  pageDate.now = () => today() + 864e5;
+  assert.match(await triage(), /^Triaged 1 mail\(s\): Newsletter 1\.$/, "a day later it's gone, and Jev is asked again");
+  assert.deepEqual([done.requests, pageScores().length], [4, 1]);
+  pageDate.now = today;
 
   // Teaching, on the same background page. Examples go into the recipes read fresh from storage, one write at a time,
   // so overlapping teaches and a Save keep each other's changes. A mail that fails is left out; the rest are taught.

@@ -24,7 +24,17 @@ function logError(what, e) {
   }).catch(console.error);
 }
 
+// Stored scores older than SCORE_DAYS go at startup and then once a day, at the next triage: this page lives as long as
+// Thunderbird runs, and an old score would otherwise be reused, or skip its mail, until the next restart.
+let pruned = 0;
+function pruneDaily() {
+  if (Date.now() - pruned < 864e5) return;
+  pruned = Date.now();
+  return pruneScores().catch((e) => console.error("JevIt: pruning stored scores failed", e));
+}
+
 async function triageList(list, manual) {
+  await pruneDaily();
   const s = await loadSettings();
   const missing = connectionProblem(s); // a used-up budget halts in classify(), once a mail needs a request: stored scores are still free
   if (missing) return notify(`Can't triage with Jev: ${missing}. Click here to open the JevIt manager.`, manual);
@@ -217,7 +227,7 @@ matchMedia("(prefers-color-scheme: dark)").addEventListener("change", resyncTags
 buildMenus();
 resyncTags();
 showBudgetBadge().catch(console.error);
-pruneScores().catch((e) => console.error("JevIt: pruning stored scores failed", e));
+pruneDaily();
 // The manager takes a draft as soon as it opens; one left from an earlier session never will be, and holds mail text.
 messenger.storage.local.remove("draft").catch(console.error);
 
