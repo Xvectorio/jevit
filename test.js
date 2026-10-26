@@ -314,6 +314,13 @@ global.messenger = { folders: {
   assert.equal(await trustedServer("a"), null, "server adds no header: the most common is 'none', nothing trusted");
   inboxWith(Array(6).fill("spf=pass; dmarc=pass header.from=x.com"));
   assert.equal(await trustedServer("a"), "", "Microsoft's nameless header can be the trusted one");
+  inboxWith([...Array(5).fill(g), ...Array(5).fill("old.example; spf=pass")]); // ids 0-4 this week, 5-9 two months ago
+  const days = (fromDate) => (Date.now() - fromDate) / 864e5;
+  messenger.messages.query = async ({ fromDate }) => ({ messages: [...(days(fromDate) > 15 ? [5, 6, 7, 8, 9] : []), 0, 1, 2, 3, 4].map((id) => ({ id })) });
+  assert.equal(await trustedServer("a"), "mx.google.com", "the last 2 weeks, not the oldest of 90 days");
+  inboxWith([g, g, ...Array(3).fill("old.example; spf=pass")]); // ids 0-1 this week, 2-4 two months ago
+  messenger.messages.query = async ({ fromDate }) => ({ messages: (days(fromDate) > 15 ? [2, 3, 4, 0, 1] : [0, 1]).map((id) => ({ id })) });
+  assert.equal(await trustedServer("a"), "old.example", "a quiet Inbox: the last 90 days");
 
   // A sender can't inflate the request: sender, subject and each address are capped, and To/Cc to 20 addresses.
   global.messenger = {
