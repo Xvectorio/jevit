@@ -555,9 +555,11 @@ global.messenger = { folders: {
   assert.deepEqual([await judgedBefore(31, s4.bodyChars), "retry" in shaky[partial.key]], [true, false]);
   shaky[partial.key] = { at: Date.now() };
   assert.equal(await judgedBefore(31, s4.bodyChars), false, "an empty entry is not judged");
-  // A numeric string is no score, for deciding as for storing.
-  assert.deepEqual([decide(rs, { jev_spam: { noul: "0.9" } }), remember(rs, ["a"], { jev_spam: { noul: "0.9" } })], [[], {}]);
+  // A numeric string, or a number outside 0 to 1, is no score, for deciding as for storing.
+  for (const noul of ["0.9", 95, -0.1, 1.01, NaN, Infinity])
+    assert.deepEqual([decide(rs, { jev_spam: { noul } }), remember(rs, ["a"], { jev_spam: { noul } })], [[], {}], `noul ${noul}`);
   assert.deepEqual(scoresIn(rs.slice(0, 2), { jev_spam: { noul: 0 }, jev_reply: { noul: null }, jev_x: { noul: 1 } }), { jev_spam: { noul: 0 } });
+  assert.deepEqual(scoresIn(rs.slice(0, 2), { jev_spam: { noul: 1 }, jev_reply: { noul: 95 } }), { jev_spam: { noul: 1 } }, "0 and 1 are scores, 95 isn't");
 
   // Triage, run as on Thunderbird's background page: jev.js and background.js in one scope, around a fake Thunderbird.
   // A move that fails takes the Triaged tag off again and marks the scores, so the next triage (skip on) redoes it for free.

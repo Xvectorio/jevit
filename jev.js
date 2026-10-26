@@ -257,8 +257,8 @@ function reuse(recipes, sigs, stored = {}) {
   return { answers, missing };
 }
 
-// Jev's yes-probability in an answer, or undefined when it isn't a number: Jev's answer is checked, not trusted.
-const noulOf = (answer) => (typeof answer?.noul === "number" ? answer.noul : undefined);
+// Jev's yes-probability in an answer, or undefined when it isn't a number from 0 to 1: Jev's answer is checked, not trusted.
+const noulOf = (answer) => (typeof answer?.noul === "number" && answer.noul >= 0 && answer.noul <= 1 ? answer.noul : undefined);
 
 // The answers in Jev's response that hold a score, for the recipes it was asked about. Anything else is left out.
 const scoresIn = (recipes, answers) =>
