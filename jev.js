@@ -427,6 +427,16 @@ const wait = (ms, signal) => new Promise((resolve, reject) => {
 
 // `signal` aborts the request and its waits between retries (triage's Stop, consent unticked).
 // An error with `maybePaid` cut off a request Jev already had (stopped, timed out): it may be charged.
+// What a failed request's reply says, kept short for notifications and the error log: the message of a JSON error
+// ({ error: { message } }, { error }, { message } or { detail }), or else the reply's text without HTML tags.
+// A proxy's or captive portal's whole web page shouldn't end up there.
+function replyReason(text = "") {
+  let json;
+  try { json = JSON.parse(text); } catch {}
+  const said = [json?.error?.message, json?.error, json?.message, json?.detail].find((s) => typeof s === "string");
+  return (said ?? text.replace(/<[^>]*>/g, " ")).replace(/\s+/g, " ").trim().slice(0, 200);
+}
+
 async function askJev({ apiKey, model, endpoint }, state, questions, signal) {
   for (let attempt = 0; ; attempt++) {
     signal?.throwIfAborted();
@@ -447,7 +457,10 @@ async function askJev({ apiKey, model, endpoint }, state, questions, signal) {
       await wait(1000 * 2 ** attempt, signal);
       continue;
     }
-    if (!r.ok) throw new Error(`Jev ${r.status}: ${await r.text().catch(cut(false))}`);
+    if (!r.ok) {
+      const reason = replyReason(await r.text().catch(cut(false)));
+      throw new Error(`Jev ${r.status}${reason ? `: ${reason}` : ""}`);
+    }
     return r.json().catch(cut(true)); // { model, answers, usage: { input_tokens, output_tokens } }
   }
 }
@@ -846,5 +859,5 @@ async function* iterate(list) {
 }
 
 if (typeof module !== "undefined") {
-  module.exports = { onMessage, markRetry, scoresIn, JEV_API, OPENROUTER_API, localApi, serviceOf, receiver, connectionProblem, storeKey, keySaved, DEFAULTS, RECIPE_LIBRARY, cleanBody, linkHosts, hiddenStyle, stripHidden, updateRecipes, questionFor, questionsFor, reuse, remember, classify, judgedBefore, pruneScores, decide, certainty, dmarcPass, plan, addExample, exampleOf, mergeExamples, learn, saveSettings, draftRecipe, parseBackup, askJev, haltRequests, countUsage, resolveFolder, applyRecipes, knownSender, emailState, authServId, trustedServer, addUsage, budgetLeft, monthName, money, syncTags, colorFor, activeScheme, PALETTE };
+  module.exports = { onMessage, markRetry, scoresIn, JEV_API, OPENROUTER_API, localApi, serviceOf, receiver, connectionProblem, storeKey, keySaved, DEFAULTS, RECIPE_LIBRARY, cleanBody, linkHosts, hiddenStyle, stripHidden, updateRecipes, questionFor, questionsFor, reuse, remember, classify, judgedBefore, pruneScores, decide, certainty, dmarcPass, plan, addExample, exampleOf, mergeExamples, learn, saveSettings, draftRecipe, parseBackup, askJev, replyReason, haltRequests, countUsage, resolveFolder, applyRecipes, knownSender, emailState, authServId, trustedServer, addUsage, budgetLeft, monthName, money, syncTags, colorFor, activeScheme, PALETTE };
 }

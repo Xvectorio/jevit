@@ -17,7 +17,7 @@ messenger.notifications.onClicked.addListener((id) => id === "jevit" && messenge
 let logged = Promise.resolve(); // one write at a time, so parallel triage doesn't drop entries
 function logError(what, e) {
   console.error("JevIt:", what, e);
-  const entry = { at: Date.now(), what, message: String(e?.message ?? e) };
+  const entry = { at: Date.now(), what, message: String(e?.message ?? e).slice(0, 500) }; // 50 of them are kept
   logged = logged.then(async () => {
     const { errors = [] } = await messenger.storage.local.get("errors");
     await messenger.storage.local.set({ errors: [entry, ...errors].slice(0, 50) });

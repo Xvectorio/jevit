@@ -1,7 +1,7 @@
 // node test.js  (set TYPESAFE_API_KEY or OPENROUTER_API_KEY to also run the default recipes against Jev there)
 const assert = require("node:assert");
 const fs = require("node:fs"), vm = require("node:vm");
-const { onMessage, markRetry, scoresIn, JEV_API, OPENROUTER_API, localApi, serviceOf, receiver, connectionProblem, storeKey, keySaved, DEFAULTS, RECIPE_LIBRARY, cleanBody, linkHosts, hiddenStyle, stripHidden, updateRecipes, questionFor, questionsFor, reuse, remember, classify, judgedBefore, pruneScores, decide, certainty, dmarcPass, plan, addExample, exampleOf, mergeExamples, learn, saveSettings, draftRecipe, parseBackup, askJev, haltRequests, countUsage, resolveFolder, applyRecipes, knownSender, emailState, authServId, trustedServer, addUsage, budgetLeft, monthName, money, syncTags, colorFor, activeScheme, PALETTE } = require("./jev.js");
+const { onMessage, markRetry, scoresIn, JEV_API, OPENROUTER_API, localApi, serviceOf, receiver, connectionProblem, storeKey, keySaved, DEFAULTS, RECIPE_LIBRARY, cleanBody, linkHosts, hiddenStyle, stripHidden, updateRecipes, questionFor, questionsFor, reuse, remember, classify, judgedBefore, pruneScores, decide, certainty, dmarcPass, plan, addExample, exampleOf, mergeExamples, learn, saveSettings, draftRecipe, parseBackup, askJev, replyReason, haltRequests, countUsage, resolveFolder, applyRecipes, knownSender, emailState, authServId, trustedServer, addUsage, budgetLeft, monthName, money, syncTags, colorFor, activeScheme, PALETTE } = require("./jev.js");
 
 assert.equal(cleanBody("Hi\n> old quote\n\n\n\n  Bye  "), "Hi\n\nBye");
 assert.equal(cleanBody("x".repeat(9000)).length, 3000);
@@ -549,6 +549,13 @@ global.messenger = { folders: {
   await until(() => sent.length === 5);
   answer();
   await assert.rejects(pending, /Jev 500: busy/);
+  // A failed request's reply, short: a JSON error's message, or the text of a web page without its tags.
+  assert.deepEqual([
+    replyReason('{"error":{"message":"Invalid API key","code":401}}'), replyReason('{"error":"rate limited"}'),
+    replyReason('{"detail":"Not Found"}'), replyReason('{"detail":[{"msg":"field required"}]}'),
+    replyReason("<html><head><title>Log in to the hotel Wi-Fi</title></head>\n<body><p>Accept   the terms</p></body></html>"),
+    replyReason(""), replyReason("x".repeat(5000)).length,
+  ], ["Invalid API key", "rate limited", "Not Found", '{"detail":[{"msg":"field required"}]}', "Log in to the hotel Wi-Fi Accept the terms", "", 200]);
   status = 429;
   pending = classify(18, s3);
   await until(() => sent.length === 6);
