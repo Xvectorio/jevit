@@ -51,9 +51,17 @@ async function triageList(list, manual) {
             skipped++;
             continue;
           }
-          const { keys, answers, act, unsure, paid } = await onMessage(m, (id) => classify(id, s, signal));
-          await allowed(s, signal); // a Stop, or consent unticked, while Jev answered: leave the mail as it was
-          await onMessage(m, (id) => applyRecipes(id, s.recipes, keys, answers, s.triagedTag, { act, unsure }));
+          const { key, retry, keys, answers, act, unsure, paid } = await onMessage(m, (id) => classify(id, s, signal));
+          // Its scores are stored by now. If the mail isn't tagged and moved after all, they're marked so the next
+          // triage doesn't skip it as done; they're reused, so that's free.
+          try {
+            await allowed(s, signal); // a Stop, or consent unticked, while Jev answered: leave the mail as it was
+            await onMessage(m, (id) => applyRecipes(id, s.recipes, keys, answers, s.triagedTag, { act, unsure }));
+          } catch (e) {
+            await markRetry(key, true).catch(console.error);
+            throw e;
+          }
+          if (retry) await markRetry(key, false).catch(console.error);
           judged++, free += !paid, review += unsure;
           for (const k of keys) matched.set(k, (matched.get(k) ?? 0) + 1);
         } catch (e) {

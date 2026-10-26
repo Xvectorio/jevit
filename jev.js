@@ -235,9 +235,16 @@ function reuse(recipes, sigs, stored = {}) {
   return { answers, missing };
 }
 
+// Jev's yes-probability in an answer, or undefined when it isn't a number: Jev's answer is checked, not trusted.
+const noulOf = (answer) => (typeof answer?.noul === "number" ? answer.noul : undefined);
+
+// The answers in Jev's response that hold a score, for the recipes it was asked about. Anything else is left out.
+const scoresIn = (recipes, answers) =>
+  Object.fromEntries(recipes.flatMap((r) => (noulOf(answers?.[r.key]) === undefined ? [] : [[r.key, answers[r.key]]])));
+
 // The scores to store for an email: one per current recipe, so stale ones are dropped.
 const remember = (recipes, sigs, answers) =>
-  Object.fromEntries(recipes.flatMap((r, i) => (typeof answers[r.key]?.noul === "number" ? [[sigs[i], answers[r.key].noul]] : [])));
+  Object.fromEntries(recipes.flatMap((r, i) => (noulOf(answers[r.key]) === undefined ? [] : [[sigs[i], noulOf(answers[r.key])]])));
 
 // Remove stored scores older than SCORE_DAYS. Entries without a time count as old; pruneScores(Infinity) removes all.
 async function pruneScores(now = Date.now()) {
@@ -249,14 +256,14 @@ async function pruneScores(now = Date.now()) {
 // Recipe keys whose yes-probability clears that recipe's threshold. A recipe set to skip known senders
 // never matches mail from someone you know, whatever Jev says.
 function decide(recipes, answers, known = false) {
-  return recipes.filter((r) => answers[r.key]?.noul >= r.threshold && !(known && r.skipKnown)).map((r) => r.key);
+  return recipes.filter((r) => noulOf(answers[r.key]) >= r.threshold && !(known && r.skipKnown)).map((r) => r.key);
 }
 
 // How sure Jev was about the matches. A match under `actSure` only tags: a wrong tag is easy to spot, a wrong move
 // to Junk hides the mail. `unsure`: a match held back like that, or a recipe that scored just under its threshold.
 // Those mails are the ones worth teaching Jev from.
 function certainty(recipes, answers, keys, { actSure = 0, unsureMargin = 0 } = {}) {
-  const p = (r) => answers[r.key]?.noul ?? 0;
+  const p = (r) => noulOf(answers[r.key]) ?? 0;
   const act = recipes.filter((r) => keys.includes(r.key) && (r.action === "tag" || p(r) >= actSure)).map((r) => r.key);
   const unsure = unsureMargin > 0 && recipes.some((r) =>
     keys.includes(r.key) ? !act.includes(r.key) : p(r) < r.threshold && p(r) >= r.threshold - unsureMargin);
@@ -295,7 +302,7 @@ function plan(recipes, keys, answers) {
   const has = (...actions) => hit.some((r) => actions.includes(r.action));
   const move = hit
     .filter((r) => movesMail(r.action) && r.folder)
-    .sort((a, b) => (answers[b.key]?.noul ?? 0) - (answers[a.key]?.noul ?? 0))[0];
+    .sort((a, b) => (noulOf(answers[b.key]) ?? 0) - (noulOf(answers[a.key]) ?? 0))[0];
   return {
     update: { ...(has("read") && { read: true }), ...(has("flag") && { flagged: true }), ...(has("junk", "junkmove") && { junk: true }) },
     folder: move?.folder ?? null,
@@ -513,9 +520,20 @@ async function emailState(id, bodyChars) {
 }
 
 // Has Jev judged this exact email before (stored scores, kept SCORE_DAYS)? Works without the Triaged tag.
+// Not when no score was kept, or when the triage they came from didn't finish (`retry`): triaging it again redoes it.
 async function judgedBefore(id, bodyChars, endpoint) {
   const key = await scoreKey(await emailState(id, bodyChars), endpoint);
-  return !!(await messenger.storage.local.get(key))[key];
+  const stored = (await messenger.storage.local.get(key))[key];
+  return !!stored && !stored.retry && Object.entries(stored).some(([sig, noul]) => sig !== "at" && typeof noul === "number");
+}
+
+// Marks an email's stored scores (`key` from classify) as from a triage that didn't finish, or as finished again.
+// Marked scores are still reused for free; they only stop "Skip already triaged mail" from skipping the email.
+async function markRetry(key, retry) {
+  const { [key]: stored } = await messenger.storage.local.get(key);
+  if (!stored || !!stored.retry === retry) return;
+  const { retry: _, ...scores } = stored;
+  await messenger.storage.local.set({ [key]: retry ? { ...scores, retry } : scores });
 }
 
 // Consent, budget and connection are read fresh, so changing them in the manager takes effect mid-batch; `signal` is
@@ -548,7 +566,7 @@ async function askCounted(settings, budget, state, questions, signal) {
     if (!e.maybePaid) await countUsage({ inputTokens: -tokens, pricePerMtok, requests: -1 });
     throw e;
   }
-  const { input_tokens = 0, cost } = response.usage ?? {};
+  const { input_tokens = 0, cost } = response?.usage ?? {};
   const reported = typeof cost === "number" ? cost - (tokens * pricePerMtok) / 1e6 : undefined;
   await countUsage({ inputTokens: input_tokens - tokens, pricePerMtok, reported, requests: 0 });
   return response;
@@ -575,12 +593,17 @@ async function classify(id, settings, stopped) {
       : false,
   ]);
   await allowed(settings, signal);
-  const answers = { ...kept, ...response?.answers };
-  if (response) await messenger.storage.local.set({ [key]: { ...remember(settings.recipes, sigs, answers), at: Date.now() } });
+  // Only answers with a numeric score count. A response without any fails the mail and stores nothing, so triaging it
+  // again asks again (the request stays counted); a partial one keeps the scores it has.
+  const fresh = scoresIn(missing, response?.answers);
+  if (missing.length && !Object.keys(fresh).length) throw new Error("Reading Jev's answer: it has no scores");
+  const answers = { ...kept, ...fresh };
+  // A `retry` mark (markRetry) stays until a triage finishes: the popup asks Jev too, but doesn't move the mail.
+  if (response) await messenger.storage.local.set({ [key]: { ...remember(settings.recipes, sigs, answers), at: Date.now(), ...(stored?.retry && { retry: true }) } });
   const keys = decide(settings.recipes, answers, known);
   // A recipe that can't match this sender can't be unsure about it either.
   const open = settings.recipes.filter((r) => !(known && r.skipKnown));
-  return { state, answers, known, keys, paid: !!response, ...certainty(open, answers, keys, settings) };
+  return { state, key, retry: !!stored?.retry, answers, known, keys, paid: !!response, ...certainty(open, answers, keys, settings) };
 }
 
 // Was this mail's topmost Authentication-Results header written by the account's own mail server? A server that
@@ -632,7 +655,9 @@ async function knownSender(author) {
 }
 
 // Set this extension's tags (leaving the user's other tags alone), then run the actions of the recipes in `act`.
-// `triaged`: Jev judged this mail, so it also gets the Triaged tag (kept on later re-triage or teaching).
+// `triaged`: Jev judged this mail, so it also gets the Triaged tag (kept on later re-triage or teaching). A failed
+// move takes it off again: the triage didn't finish. The folder is found first, so a folder that can't be made
+// fails the mail before anything changes.
 // `unsure` adds the Unsure tag; any other call removes it, because the user has now judged the mail.
 // Tags must exist first: call syncTags(settings) before a batch.
 async function applyRecipes(id, recipes, keys, answers, triaged = false, { act = keys, unsure = false } = {}) {
@@ -640,10 +665,17 @@ async function applyRecipes(id, recipes, keys, answers, triaged = false, { act =
   const ours = new Set([...recipes.map((r) => r.key), UNSURE.key]);
   const m = await messenger.messages.get(id).catch(during("Reading the mail"));
   const { update, folder } = plan(recipes, act, answers);
+  const target = folder && m.folder ? await resolveFolder(folder, m.folder.accountId).catch(during("Finding the folder")) : folder;
   const tags = new Set([...m.tags.filter((t) => !ours.has(t)), ...keys, ...extra.map((t) => t.key)]);
   await messenger.messages.update(id, { ...update, tags: [...tags] }).catch(during("Tagging the mail"));
-  const target = folder && m.folder ? await resolveFolder(folder, m.folder.accountId) : folder;
-  if (target && target !== m.folder?.id) await messenger.messages.move([id], target).catch(during("Moving the mail"));
+  if (!target || target === m.folder?.id) return;
+  await messenger.messages.move([id], target).catch(async (e) => {
+    if (triaged) {
+      tags.delete(TRIAGED.key);
+      await messenger.messages.update(id, { tags: [...tags] }).catch((err) => console.warn("JevIt: removing the Triaged tag failed", err));
+    }
+    during("Moving the mail")(e);
+  });
 }
 
 // The step that failed, in front of the error. Halts keep their own message and cause.
@@ -720,5 +752,5 @@ async function* iterate(list) {
 }
 
 if (typeof module !== "undefined") {
-  module.exports = { onMessage, JEV_API, OPENROUTER_API, localApi, serviceOf, receiver, connectionProblem, DEFAULTS, RECIPE_LIBRARY, cleanBody, linkHosts, updateRecipes, questionFor, questionsFor, reuse, remember, classify, judgedBefore, pruneScores, decide, certainty, dmarcPass, plan, addExample, draftRecipe, parseBackup, askJev, haltRequests, countUsage, resolveFolder, applyRecipes, knownSender, emailState, authServId, trustedServer, addUsage, budgetLeft, money, syncTags, colorFor, activeScheme, PALETTE };
+  module.exports = { onMessage, markRetry, scoresIn, JEV_API, OPENROUTER_API, localApi, serviceOf, receiver, connectionProblem, DEFAULTS, RECIPE_LIBRARY, cleanBody, linkHosts, updateRecipes, questionFor, questionsFor, reuse, remember, classify, judgedBefore, pruneScores, decide, certainty, dmarcPass, plan, addExample, draftRecipe, parseBackup, askJev, haltRequests, countUsage, resolveFolder, applyRecipes, knownSender, emailState, authServId, trustedServer, addUsage, budgetLeft, money, syncTags, colorFor, activeScheme, PALETTE };
 }

@@ -67,7 +67,8 @@
       <p>Triaging an email again replaces JevIt's tags on it. Your own Thunderbird tags are never touched.
         Moves, stars, read and junk flags are not undone.</p>
       <p><b>Skip already triaged mail</b> (Connection section, on by default): when you triage selected mail, emails Jev already judged (they have the Triaged tag, or stored scores from the last 90 days) are skipped,
-        so triaging a whole folder again doesn't cost anything twice. Untick it to apply your recipes to them again, for example after changing a threshold.</p>
+        so triaging a whole folder again doesn't cost anything twice. Untick it to apply your recipes to them again, for example after changing a threshold.
+        An email whose triage failed isn't skipped, for example when moving it failed or Jev's answer had no scores in it: triaging it again finishes the job, for free if Jev's scores were stored.</p>
       <p><b>Jev's scores are remembered.</b> JevIt stores Jev's score for every email and recipe on your computer, for 90 days. Opening the header popup, or triaging an email again,
         reuses them for free, even when this month's budget is used up. Only a recipe you edited or taught since, or a new recipe, is sent to Jev again, and so is an email whose content changed.
         <b>Forget stored scores</b> (Usage &amp; budget section) deletes them all, so Jev is asked again; mail with the Triaged tag is still skipped unless you untick <b>Skip already triaged mail</b>.</p>
@@ -179,7 +180,7 @@
 
     <section class="card" id="triaged">
       <h2>The Triaged tag</h2>
-      <p>Every email Jev has judged gets a <b>Triaged</b> tag, whether or not any recipe matched. Teaching doesn't add it, and neither does a failed triage.
+      <p>Every email Jev has judged gets a <b>Triaged</b> tag, whether or not any recipe matched. Teaching doesn't add it, and neither does a failed triage: when moving the email fails, the tag comes off again.
         Use Thunderbird's quick filter or a saved search on this tag to see what JevIt has processed, or what it hasn't yet.
         You can change its name and colour in the Connection section. Rename it there, not in Thunderbird's own tag settings: JevIt sets its tags' names, so a rename there is undone. It starts close to Thunderbird's own text colour, so triaged mail looks as before.</p>
       <p>Thunderbird fills a <b>selected</b> row with the colour of its first tag, so a selected triaged email looks different from an untagged one.
