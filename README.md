@@ -78,3 +78,7 @@ JevIt is free. If it saves you time, you can buy me a coffee at [ko-fi.com/jevit
 ## License
 
 [MPL-2.0](LICENSE)
+
+## Review record
+
+[AUDIT.md](AUDIT.md) is a record of an outside review of one commit: what that commit sends, which exposures were filed, and a reading of the license. To add a finding or dispute one, open an issue, or a pull request that changes AUDIT.md, and name the commit and the file you read.
