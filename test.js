@@ -1,7 +1,7 @@
 // node test.js  (set TYPESAFE_API_KEY or OPENROUTER_API_KEY to also run the default recipes against Jev there)
 const assert = require("node:assert");
 const fs = require("node:fs"), vm = require("node:vm");
-const { onMessage, markRetry, scoresIn, JEV_API, OPENROUTER_API, localApi, serviceOf, receiver, connectionProblem, storeKey, keySaved, DEFAULTS, RECIPE_LIBRARY, cleanBody, linkHosts, updateRecipes, questionFor, questionsFor, reuse, remember, classify, judgedBefore, pruneScores, decide, certainty, dmarcPass, plan, addExample, draftRecipe, parseBackup, askJev, haltRequests, countUsage, resolveFolder, applyRecipes, knownSender, emailState, authServId, trustedServer, addUsage, budgetLeft, money, syncTags, colorFor, activeScheme, PALETTE } = require("./jev.js");
+const { onMessage, markRetry, scoresIn, JEV_API, OPENROUTER_API, localApi, serviceOf, receiver, connectionProblem, storeKey, keySaved, DEFAULTS, RECIPE_LIBRARY, cleanBody, linkHosts, updateRecipes, questionFor, questionsFor, reuse, remember, classify, judgedBefore, pruneScores, decide, certainty, dmarcPass, plan, addExample, exampleOf, mergeExamples, learn, saveSettings, draftRecipe, parseBackup, askJev, haltRequests, countUsage, resolveFolder, applyRecipes, knownSender, emailState, authServId, trustedServer, addUsage, budgetLeft, money, syncTags, colorFor, activeScheme, PALETTE } = require("./jev.js");
 
 assert.equal(cleanBody("Hi\n> old quote\n\n\n\n  Bye  "), "Hi\n\nBye");
 assert.equal(cleanBody("x".repeat(9000)).length, 3000);
@@ -62,6 +62,19 @@ assert.deepEqual([spam.examples[0].subject, spam.examples[19].subject], ["Win 5"
 const q = questionFor(spam);
 assert.equal(q.instructions.examples_yes.length + q.instructions.examples_no.length, 20);
 assert.equal(q.instructions.examples_yes[0].label, undefined);
+// The same mail taught again replaces its example: a second click, or a yes turned into a no, doesn't count twice.
+const twice = { examples: [] };
+addExample(twice, email, true);
+addExample(twice, email, true);
+assert.equal(twice.examples.length, 1);
+addExample(twice, email, false);
+assert.deepEqual(twice.examples.map((e) => e.label), [false]);
+// The manager adds what was taught while it was open, and keeps out what it removed (✕, Forget examples) and hasn't saved.
+const ex = (subject, label = true) => exampleOf({ ...email, subject }, label);
+assert.deepEqual(mergeExamples([ex("a")], [ex("a"), ex("b"), ex("c")], [ex("a"), ex("b")]), [ex("a"), ex("c")], "b removed in the form, c taught meanwhile");
+assert.deepEqual(mergeExamples([], [ex("a")], [ex("a")]), [], "Forget examples stays forgotten");
+assert.deepEqual(mergeExamples([ex("a")], [ex("a", false)], [ex("a")]), [ex("a", false)], "taught again as no meanwhile: replaced");
+assert.deepEqual(mergeExamples([ex("d")], undefined, undefined), [ex("d")], "a new recipe, not stored yet");
 
 const rs = DEFAULTS.recipes;
 assert.deepEqual(decide(rs, { jev_spam: { noul: 0.8 }, jev_reply: { noul: 0.59 }, jev_urgent: { noul: 0.9 } }), ["jev_spam", "jev_urgent"]);
@@ -516,6 +529,13 @@ global.messenger = { folders: {
   messenger.extension.getBackgroundPage = () => globalThis; // on the background page itself: counted there
   assert.equal(await countUsage({ inputTokens: 5, pricePerMtok: 1 }), true);
   assert.deepEqual([messages.length, kept.usage.requests], [1, before + 2]);
+  // Recipes too: the popup's examples and the manager's Save are written there, one at a time with teaching.
+  messenger.extension.getBackgroundPage = () => ({});
+  await learn([{ key: "jev_spam", example: ex("p") }]);
+  await saveSettings({ recipes: [] }, {});
+  assert.deepEqual(messages.slice(1), [{ learn: [[{ key: "jev_spam", example: ex("p") }]] }, { saveSettings: [{ recipes: [] }, {}] }]);
+  assert.equal(kept.recipes, undefined, "not written on this page");
+  messenger.extension.getBackgroundPage = () => globalThis;
   const none = { requests: 0, inputTokens: 0, cost: 0 };
   assert.deepEqual(addUsage({ month: "m", ...none, requests: 1, total: none }, "m", -20, 0, -1, -1), { month: "m", ...none, total: none }, "never below 0");
 
@@ -575,8 +595,8 @@ global.messenger = { folders: {
       extension: { getBackgroundPage: () => undefined },
       notifications: { create: async (id, { message }) => done.notes.push(message) },
       storage: { local: {
-        get: async (k) => (k === null ? { ...page } : typeof k === "string" ? { [k]: page[k] } : Object.fromEntries(Object.entries(k).map(([key, d]) => [key, page[key] ?? d]))),
-        set: async (o) => Object.assign(page, structuredClone(o)),
+        get: async (k) => structuredClone(k === null ? page : typeof k === "string" ? { [k]: page[k] } : Object.fromEntries(Object.entries(k).map(([key, d]) => [key, page[key] ?? d]))),
+        set: async (o) => Object.assign(page, structuredClone(o)), // copies both ways, as Thunderbird's storage does
         remove: async (keys) => [keys].flat().forEach((k) => delete page[k]),
       } },
       identities: { getDefault: async () => ({ email: "me@example.com" }) },
@@ -612,6 +632,65 @@ global.messenger = { folders: {
   answerWith = { noul: 0.95 };
   assert.match(await triage(), /^Triaged 1 mail\(s\): Newsletter 1\.$/, "asked again, not skipped");
   assert.deepEqual([done.requests, done.moves], [3, 3]);
+
+  // Teaching, on the same background page. Examples go into the recipes read fresh from storage, one write at a time,
+  // so overlapping teaches and a Save keep each other's changes. A mail that fails is left out; the rest are taught.
+  const mails = (...ids) => ({ messages: ids.map((id) => ({ id, subject: `Teach ${id}`, tags: [], folder: { id: "a:/INBOX", accountId: "a" } })) });
+  const taught = () => page.recipes[0].examples.map((e) => `${e.subject} ${e.label}`);
+  let failOn, gate = () => {}, waiting = [];
+  Object.assign(ctx.messenger.messages, {
+    get: async (id) => ({ ...structuredClone(header), id, subject: `Teach ${id}`, tags: [] }),
+    update: async (id) => {
+      await gate(id);
+      if (id === failOn) throw new Error("Tag refused");
+    },
+  });
+  page.recipes = [{ ...rs[2], action: "tag", examples: [] }];
+  page.errors = [];
+  failOn = 52;
+  await ctx.teach(mails(51, 52, 53), "jev_newsletter", true);
+  await vm.runInContext("Promise.all([shown, logged])", ctx);
+  assert.deepEqual(taught(), ["Teach 51 true", "Teach 53 true"], "mail 2 of 3 failed: 1 and 3 are taught");
+  assert.equal(done.notes.at(-1), "Teaching Jev failed for 1 of 3 mail(s): Tagging the mail: Tag refused");
+  assert.deepEqual(page.errors.map((e) => e.what), ["Teach 52"]);
+  failOn = undefined;
+  await ctx.teach(mails(51, 52, 53), "jev_newsletter", true);
+  assert.deepEqual(taught().sort(), ["Teach 51 true", "Teach 52 true", "Teach 53 true"], "taught again: no doubles");
+  // A list that breaks off still stores what was taught before, and the menu's handler says so.
+  ctx.messenger.messages.continueList = async () => { throw new Error("List gone"); };
+  await assert.rejects(ctx.teach({ ...mails(54), id: "more" }, "jev_newsletter", false), /List gone/);
+  assert.equal(taught().at(-1), "Teach 54 false");
+  vm.runInContext("teachFailed(new Error('List gone'))", ctx);
+  await vm.runInContext("shown", ctx);
+  assert.equal(done.notes.at(-1), "Teaching Jev failed: List gone");
+  // Two teaches at once (the menu and Alt+Shift+S): both read the recipes before either is done, and both are kept.
+  let release;
+  const held = new Promise((r) => (release = r));
+  gate = (id) => (waiting.push(id), held);
+  const both = Promise.all([ctx.teach(mails(61), "jev_newsletter", true), ctx.teach(mails(62), "jev_newsletter", false)]);
+  await until(() => waiting.length === 2);
+  release();
+  await both;
+  assert.deepEqual(taught().slice(-2).sort(), ["Teach 61 true", "Teach 62 false"]);
+  assert.equal(taught().length, 6);
+  // Save during a teach: the Save's edits and its Forget examples stay, and the teach's example is added to them,
+  // whichever of the two is written first.
+  const form = (threshold) => ({ recipes: [{ ...structuredClone(page.recipes[0]), threshold, examples: [] }] }); // the other settings too, in the manager
+  waiting = [];
+  let releaseSave;
+  gate = (id) => (waiting.push(id), new Promise((r) => (releaseSave = r)));
+  const teaching = ctx.teach(mails(71), "jev_newsletter", true);
+  await until(() => waiting.length === 1);
+  await ctx.saveSettings(form(0.5), { jev_newsletter: page.recipes[0].examples });
+  assert.deepEqual([page.recipes[0].threshold, taught()], [0.5, []], "saved, examples forgotten");
+  releaseSave();
+  await teaching;
+  assert.deepEqual([page.recipes[0].threshold, taught()], [0.5, ["Teach 71 true"]], "the teach didn't write its older copy over the Save");
+  gate = () => {};
+  const seenThen = { jev_newsletter: page.recipes[0].examples }; // the manager read the recipes, then a teach is stored
+  await ctx.teach(mails(72), "jev_newsletter", false);
+  await ctx.saveSettings(form(0.6), seenThen);
+  assert.deepEqual([page.recipes[0].threshold, taught()], [0.6, ["Teach 72 false"]], "the Save kept the example taught after the form loaded");
 
   assert.deepEqual(reuse(rs.slice(0, 2), ["a", "b"], { b: 0.4, c: 1 }), { answers: { jev_reply: { noul: 0.4 } }, missing: [rs[0]] });
   assert.deepEqual(remember(rs.slice(0, 2), ["a", "b"], { jev_spam: { noul: 0.9 } }), { a: 0.9 }, "only recipes with an answer");

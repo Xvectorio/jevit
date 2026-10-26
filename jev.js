@@ -331,9 +331,20 @@ function plan(recipes, keys, answers) {
   };
 }
 
+// An example is a mail's sender, subject and start of its text, with your yes or no. The same mail taught again
+// replaces its example: a second click doesn't count it twice, and a corrected answer doesn't contradict the old one.
+const exampleOf = (email, label) => ({ from: email.from, subject: email.subject, snippet: email.body.slice(0, 300), label });
+const sameMail = (a, b) => a.from === b.from && a.subject === b.subject && a.snippet === b.snippet;
+const withExample = (examples, example) => [...examples.filter((e) => !sameMail(e, example)), example].slice(-MAX_EXAMPLES);
 function addExample(recipe, email, label) {
-  const example = { from: email.from, subject: email.subject, snippet: email.body.slice(0, 300), label };
-  recipe.examples = [...recipe.examples, example].slice(-MAX_EXAMPLES);
+  recipe.examples = withExample(recipe.examples, exampleOf(email, label));
+}
+
+// A recipe's examples in the manager, with the stored ones it hasn't seen yet (`seen`: what it last read from storage)
+// added: taught from the menu or the popup while it was open. Examples it took out (✕, Forget examples) stay out.
+function mergeExamples(mine, stored = [], seen = []) {
+  const has = (list, e) => list.some((x) => sameMail(x, e) && x.label === e.label);
+  return stored.filter((e) => !has(seen, e) && !has(mine, e)).reduce(withExample, mine);
 }
 
 // "Free Mobile <x@free.fr>" -> "Free Mobile"; "x@free.fr" -> "free.fr".
@@ -467,14 +478,20 @@ function budgetLeft(settings, usage, month) {
 
 const loadUsage = async () => (await messenger.storage.local.get({ usage: null })).usage;
 
+// Runs fn on the background page, one at a time with its other serial() calls. Each page has its own serial() queue,
+// so a popup or the manager changing storage at the same moment as a triage or teach could lose one change: other
+// pages send `message` there instead, and the background page answers it by making the same call (background.js).
+function inBackground(message, fn) {
+  const background = globalThis.messenger?.extension?.getBackgroundPage?.();
+  if (background && background !== globalThis) return messenger.runtime.sendMessage(message);
+  return serial(fn);
+}
+
 // Counts a change to the usage (addUsage's arguments). With `budget`, only while this month's budget isn't used up:
 // returns whether it was counted, so checking and counting are one step and parallel mails can't all slip past.
-// The background page does every count, one at a time: each page has its own serial() queue, so a popup and a triage
-// counting at the same moment could lose one. Other pages (the popup) send theirs there.
+// The background page does every count (inBackground).
 function countUsage(change, budget) {
-  const background = globalThis.messenger?.extension?.getBackgroundPage?.();
-  if (background && background !== globalThis) return messenger.runtime.sendMessage({ countUsage: [change, budget] });
-  return serial(async () => {
+  return inBackground({ countUsage: [change, budget] }, async () => {
     const usage = await loadUsage(), month = monthOf(), { inputTokens, pricePerMtok, reported, requests } = change;
     if (budget !== undefined && budgetLeft({ budget }, usage, month) <= 0) return false;
     await messenger.storage.local.set({ usage: addUsage(usage, month, inputTokens, pricePerMtok, reported, requests) });
@@ -483,6 +500,38 @@ function countUsage(change, budget) {
 }
 
 const loadSettings = () => messenger.storage.local.get(DEFAULTS);
+
+// Recipes are written on the background page only, one write at a time, each on the recipes read fresh from storage
+// (inBackground). Otherwise a teach, an Apply and a Save would each write the whole list they started from, and the
+// last one would drop the others' changes.
+
+// Stores examples ({ key, example }) taught from the menu, a shortcut or the popup into the recipes they're for.
+// A recipe removed meanwhile gets none. Returns how many were stored.
+function learn(taught) {
+  return inBackground({ learn: [taught] }, async () => {
+    const { recipes } = await messenger.storage.local.get({ recipes: DEFAULTS.recipes });
+    let stored = 0;
+    const changed = recipes.map((r) => {
+      const added = taught.filter((t) => t.key === r.key).map((t) => t.example);
+      stored += added.length;
+      return added.length ? { ...r, examples: added.reduce(withExample, r.examples) } : r;
+    });
+    if (stored) await messenger.storage.local.set({ recipes: changed });
+    return stored;
+  });
+}
+
+// Save in the manager: its settings, keeping the examples stored since it last read them (mergeExamples; `seen` holds
+// what it read, by recipe key). Returns the recipes as saved.
+function saveSettings(settings, seen) {
+  return inBackground({ saveSettings: [settings, seen] }, async () => {
+    const { recipes: stored = [] } = await messenger.storage.local.get("recipes");
+    const recipes = settings.recipes.map((r) =>
+      ({ ...r, examples: mergeExamples(r.examples, stored.find((x) => x.key === r.key)?.examples, seen[r.key]) }));
+    await messenger.storage.local.set({ ...settings, recipes });
+    return recipes;
+  });
+}
 
 // "Log in to PayPal → evil.example": what a link says, next to the host it really goes to. One entry per host, in order.
 // Links without a host (relative, mailto:, javascript:) are left out. Hosts come out in punycode, so look-alikes show.
@@ -777,5 +826,5 @@ async function* iterate(list) {
 }
 
 if (typeof module !== "undefined") {
-  module.exports = { onMessage, markRetry, scoresIn, JEV_API, OPENROUTER_API, localApi, serviceOf, receiver, connectionProblem, storeKey, keySaved, DEFAULTS, RECIPE_LIBRARY, cleanBody, linkHosts, updateRecipes, questionFor, questionsFor, reuse, remember, classify, judgedBefore, pruneScores, decide, certainty, dmarcPass, plan, addExample, draftRecipe, parseBackup, askJev, haltRequests, countUsage, resolveFolder, applyRecipes, knownSender, emailState, authServId, trustedServer, addUsage, budgetLeft, money, syncTags, colorFor, activeScheme, PALETTE };
+  module.exports = { onMessage, markRetry, scoresIn, JEV_API, OPENROUTER_API, localApi, serviceOf, receiver, connectionProblem, storeKey, keySaved, DEFAULTS, RECIPE_LIBRARY, cleanBody, linkHosts, updateRecipes, questionFor, questionsFor, reuse, remember, classify, judgedBefore, pruneScores, decide, certainty, dmarcPass, plan, addExample, exampleOf, mergeExamples, learn, saveSettings, draftRecipe, parseBackup, askJev, haltRequests, countUsage, resolveFolder, applyRecipes, knownSender, emailState, authServId, trustedServer, addUsage, budgetLeft, money, syncTags, colorFor, activeScheme, PALETTE };
 }
