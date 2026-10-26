@@ -547,7 +547,22 @@ function linkHosts(anchors) {
   }).slice(0, MAX_LINKS);
 }
 
-// Visible text of an HTML body: without CSS and scripts, which textContent would otherwise keep.
+// Whether an inline style hides its element: display:none, visibility:hidden, opacity or font-size 0, or a height
+// of 0 with overflow hidden. "!important", spacing and case don't matter.
+function hiddenStyle(style = "") {
+  const css = Object.fromEntries(style.split(";").map((d) => d.split(":").map((s) => s.replace(/!\s*important/i, "").trim().toLowerCase())));
+  const zero = (v) => parseFloat(v) === 0;
+  return css.display === "none" || css.visibility === "hidden" || zero(css.opacity) || zero(css["font-size"]) ||
+    ((zero(css.height) || zero(css["max-height"])) && css.overflow === "hidden");
+}
+
+// Removes what the reader doesn't see, with everything inside it, so its text and links aren't sent and can't sway the
+// score. A guess from inline styles and the hidden attribute only: DOMParser lays nothing out, and <style> rules aren't read.
+function stripHidden(doc) {
+  doc.querySelectorAll("[hidden], [style]").forEach((e) => (e.hasAttribute("hidden") || hiddenStyle(e.getAttribute("style"))) && e.remove());
+}
+
+// Text of an HTML body: without CSS and scripts, which textContent would otherwise keep.
 function htmlText(doc) {
   doc.querySelectorAll("style, script, noscript, template").forEach((e) => e.remove());
   return doc.body.textContent;
@@ -564,7 +579,9 @@ async function emailState(id, bodyChars) {
   const plain = parts.find((p) => p.contentType === "text/plain");
   const html = parts.find((p) => p.contentType === "text/html");
   // Links come from the HTML part even when the plain part is the body: that's where the sender can hide where they go.
+  // Hidden elements go first, so hidden links can't push the real ones out of the MAX_LINKS.
   const doc = html && new DOMParser().parseFromString(html.content, "text/html");
+  if (doc) stripHidden(doc);
   const links = doc ? linkHosts([...doc.querySelectorAll("a[href]")].map((a) => ({ href: a.getAttribute("href"), text: a.textContent }))) : [];
   const body = plain ? plain.content : doc ? htmlText(doc) : "";
   const full = await messenger.messages.getFull(id);
@@ -826,5 +843,5 @@ async function* iterate(list) {
 }
 
 if (typeof module !== "undefined") {
-  module.exports = { onMessage, markRetry, scoresIn, JEV_API, OPENROUTER_API, localApi, serviceOf, receiver, connectionProblem, storeKey, keySaved, DEFAULTS, RECIPE_LIBRARY, cleanBody, linkHosts, updateRecipes, questionFor, questionsFor, reuse, remember, classify, judgedBefore, pruneScores, decide, certainty, dmarcPass, plan, addExample, exampleOf, mergeExamples, learn, saveSettings, draftRecipe, parseBackup, askJev, haltRequests, countUsage, resolveFolder, applyRecipes, knownSender, emailState, authServId, trustedServer, addUsage, budgetLeft, money, syncTags, colorFor, activeScheme, PALETTE };
+  module.exports = { onMessage, markRetry, scoresIn, JEV_API, OPENROUTER_API, localApi, serviceOf, receiver, connectionProblem, storeKey, keySaved, DEFAULTS, RECIPE_LIBRARY, cleanBody, linkHosts, hiddenStyle, stripHidden, updateRecipes, questionFor, questionsFor, reuse, remember, classify, judgedBefore, pruneScores, decide, certainty, dmarcPass, plan, addExample, exampleOf, mergeExamples, learn, saveSettings, draftRecipe, parseBackup, askJev, haltRequests, countUsage, resolveFolder, applyRecipes, knownSender, emailState, authServId, trustedServer, addUsage, budgetLeft, money, syncTags, colorFor, activeScheme, PALETTE };
 }
