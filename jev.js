@@ -1,5 +1,35 @@
 // Shared triage logic for background, popup and options pages (plain script, no bundler).
 const JEV_API = "https://api.typesafe.ai/v1/systemone";
+// Where mail can go: a fixed choice, so the manifest names every host and the consent text names who receives it.
+const OPENROUTER_API = "https://openrouter.ai/api/v1/systemone";
+const LOCAL_PORT = 8791;
+const localApi = (port = LOCAL_PORT) => `http://127.0.0.1:${port}/v1/systemone`; // an Open-Jev server on this computer
+const SERVICES = {
+  typesafe: { name: "TypeSafe", host: "api.typesafe.ai", keys: "typesafe.ai" },
+  openrouter: { name: "OpenRouter", host: "openrouter.ai", keys: "openrouter.ai/keys" },
+  local: { name: "Open-Jev", host: "127.0.0.1" }, // a key is optional
+};
+const serviceOf = (endpoint = JEV_API) =>
+  endpoint === OPENROUTER_API ? "openrouter" : endpoint.startsWith("http://127.0.0.1:") ? "local" : "typesafe";
+
+// Who receives the mail, as the consent text says it. OpenRouter passes it on to the model's provider:
+// TypeSafe for Jev ("jev-latest", "typesafe/jev-1.13"), someone else for a model like "openai/…".
+function receiver(endpoint, model = "") {
+  const service = serviceOf(endpoint);
+  if (service !== "openrouter") return `${SERVICES[service].name} (${SERVICES[service].host})`;
+  const author = model.includes("/") ? model.split("/")[0].replace(/^~/, "") : "typesafe";
+  return author === "typesafe"
+    ? "OpenRouter (openrouter.ai), which passes it to TypeSafe"
+    : `OpenRouter (openrouter.ai) and ${author}, the provider of ${model}`;
+}
+
+// Why triage can't ask Jev yet, or "" when it can.
+function connectionProblem({ endpoint, apiKey, consent }) {
+  const service = serviceOf(endpoint);
+  return !apiKey && service !== "local" ? `no ${SERVICES[service].name} API key is set`
+    : !consent ? `sending mail to ${SERVICES[service].name} is not allowed yet`
+    : "";
+}
 const HEADER_CHARS = 1000; // per header (and per address, subject, sender), so a sender can't inflate the request
 const MAX_RECIPIENTS = 20; // To and Cc each; enough to tell a personal mail from a mass mailing
 const MAX_EXAMPLES = 20; // per recipe, newest kept; examples ride along in every request (~100 tokens each)
@@ -136,7 +166,7 @@ const DEFAULTS = {
   apiKey: "",
   consent: false, // explicit opt-in before any mail content leaves Thunderbird (ATN policy)
   model: "jev-latest",
-  endpoint: JEV_API, // or a local Open-Jev server, e.g. http://127.0.0.1:8791/v1/systemone
+  endpoint: JEV_API, // OPENROUTER_API, or localApi(port). Other services' keys are kept in `apiKeys`, outside the settings
   autoTriage: false,
   skipTriaged: true, // triaging selected mail skips mail Jev already judged: Triaged tag or stored scores
   triagedTag: true, // tag every judged mail Triaged. Thunderbird fills a selected row with its first tag's colour, so off keeps untouched mail looking as before
@@ -154,11 +184,23 @@ const DEFAULTS = {
   recipes: RECIPE_LIBRARY.slice(0, 5),
 };
 
+// Links written out in text, down to where they go: a web link keeps only its host (no user:password@, port, path,
+// query or #fragment), a mailto: link only its address. Punctuation ending the sentence stays.
+// A link the URL parser rejects still loses everything around its host-like part, never kept as written.
+function linksToHosts(text) {
+  return text.replace(/(?:https?:\/\/|mailto:)[^\s>)\]]+/gi, (link) => {
+    const [, url, tail] = link.match(/^(.*?)([.,;:!?'"]*)$/s);
+    if (/^mailto:/i.test(url)) return url.slice(7).split(/[?#]/)[0] + tail;
+    try { return new URL(url).hostname + tail; } catch {}
+    const authority = url.replace(/^[a-z]+:\/\//i, "").split(/[/\\?#]/)[0];
+    return authority.slice(authority.lastIndexOf("@") + 1).split(":")[0] + tail;
+  });
+}
+
 // ponytail: hard cut at `max` characters; add smarter excerpting if long mails misclassify
 function cleanBody(text, max = DEFAULTS.bodyChars) {
-  return text
-    .replace(/[\u00AD\u034F\u200B-\u200D\u2060\uFEFF]/g, "") // invisible preheader padding in marketing mail
-    .replace(/https?:\/\/([^/\s>)\]]+)[^\s>)\]]*/g, "$1") // links: keep the host, drop paths and tracking tokens
+  const visible = text.replace(/[\u00AD\u034F\u200B-\u200D\u2060\uFEFF]/g, ""); // invisible preheader padding in marketing mail
+  return linksToHosts(visible)
     .split("\n")
     .map((l) => l.replace(/[ \t ]+/g, " ").trim())
     .filter((l) => !l.startsWith(">")) // quoted replies are noise for the current mail
@@ -188,7 +230,7 @@ function questionsFor(recipes) {
 // changing a threshold. A score belongs to the exact email Jev saw and the exact question (model, recipe question,
 // criteria and examples): editing or teaching a recipe makes its old scores stale. Keyed by a hash of the email,
 // not its Message-ID: the sender picks that, and could borrow the scores of mail you trust.
-// Another endpoint (a local Open-Jev server) keeps its own scores; TypeSafe's keep their original keys.
+// Another endpoint (OpenRouter, a local Open-Jev server) keeps its own scores; TypeSafe's keep their original keys.
 // Kept for SCORE_DAYS after Jev was last asked about the email (reuse doesn't extend it); pruneScores() runs at startup.
 const SCORE_DAYS = 90;
 const digest = async (value) => {
@@ -336,7 +378,7 @@ async function askJev({ apiKey, model, endpoint }, state, questions) {
     const r = await fetch(endpoint || JEV_API, {
       method: "POST",
       redirect: "error", // mail and key go to this endpoint only, never on to where it redirects
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      headers: { ...(apiKey && { Authorization: `Bearer ${apiKey}` }), "Content-Type": "application/json" },
       body: JSON.stringify({ model, state, questions }),
     });
     if ((r.status === 429 || r.status === 529) && attempt < 4) {
@@ -355,8 +397,9 @@ const money = (usd) => `$${usd > 0 && usd < 0.01 ? usd.toFixed(5) : usd.toFixed(
 const emptyUsage = () => ({ requests: 0, inputTokens: 0, cost: 0 });
 
 // Counters after one more request: this month's (restarting when the month changes) and all-time.
-function addUsage(usage, month, inputTokens, pricePerMtok) {
-  const cost = (inputTokens * pricePerMtok) / 1e6;
+// OpenRouter reports what a request cost; otherwise it's estimated from the input tokens.
+function addUsage(usage, month, inputTokens, pricePerMtok, reported) {
+  const cost = typeof reported === "number" ? reported : (inputTokens * pricePerMtok) / 1e6;
   const add = (u) => ({ requests: u.requests + 1, inputTokens: u.inputTokens + inputTokens, cost: u.cost + cost });
   const current = usage?.month === month ? usage : emptyUsage();
   return { month, ...add(current), total: add(usage?.total ?? emptyUsage()) };
@@ -376,6 +419,7 @@ const loadSettings = () => messenger.storage.local.get(DEFAULTS);
 
 // "Log in to PayPal → evil.example": what a link says, next to the host it really goes to. One entry per host, in order.
 // Links without a host (relative, mailto:, javascript:) are left out. Hosts come out in punycode, so look-alikes show.
+// A link text that is itself a URL ("https://paypal.com/reset?token=…") is cut down to its host like the body.
 function linkHosts(anchors) {
   const seen = new Set();
   return anchors.flatMap(({ href, text }) => {
@@ -383,7 +427,7 @@ function linkHosts(anchors) {
     try { host = new URL(href).hostname; } catch {}
     if (!host || seen.has(host)) return [];
     seen.add(host);
-    return [`${text.replace(/\s+/g, " ").trim().slice(0, 80)} → ${host}`.trim()];
+    return [`${linksToHosts(text.replace(/\s+/g, " ").trim()).slice(0, 80)} → ${host}`.trim()];
   }).slice(0, MAX_LINKS);
 }
 
@@ -421,12 +465,14 @@ async function emailState(id, bodyChars) {
   // Everything the sender writes is capped: this ends up in every request, and in examples that ride along in later ones.
   const cut = (text = "") => text.slice(0, HEADER_CHARS);
   const cutList = (list = []) => list.slice(0, MAX_RECIPIENTS).map(cut);
+  // List-Unsubscribe links carry a personal token; that there is one, and its host, is the signal.
+  const unsubscribe = header("list-unsubscribe");
   return {
     me: identity?.email ?? "",
     email: {
       from: cut(m.author), to: cutList(m.recipients), cc: cutList(m.ccList), subject: cut(m.subject), body: cleanBody(body, bodyChars),
       links, attachments,
-      headers: { "Authentication-Results": header("authentication-results"), "List-Unsubscribe": header("list-unsubscribe"), "Reply-To": header("reply-to") },
+      headers: { "Authentication-Results": header("authentication-results"), "List-Unsubscribe": unsubscribe && linksToHosts(unsubscribe), "Reply-To": header("reply-to") },
     },
   };
 }
@@ -438,11 +484,16 @@ async function judgedBefore(id, bodyChars, endpoint) {
 }
 
 async function classify(id, settings) {
-  // Consent and budget are read fresh, so changing them in the manager takes effect mid-batch.
+  // Consent, budget and connection are read fresh, so changing them in the manager takes effect mid-batch.
   // Their errors have cause "halt": the rest of a batch would fail the same way.
-  const { consent, budget } = await messenger.storage.local.get({ consent: DEFAULTS.consent, budget: DEFAULTS.budget });
-  if (!consent) throw new Error("Allow sending mail to TypeSafe first (JevIt manager, top of the page).", { cause: "halt" });
-  const state = await emailState(id, settings.bodyChars);
+  const now = await messenger.storage.local.get({ consent: DEFAULTS.consent, budget: DEFAULTS.budget, endpoint: DEFAULTS.endpoint, model: DEFAULTS.model });
+  const { budget } = now;
+  if (!now.consent) throw new Error(`Allow sending mail to ${SERVICES[serviceOf(now.endpoint)].name} first (JevIt manager, top of the page).`, { cause: "halt" });
+  // Consent given for another service or model doesn't cover the one this batch started with.
+  if (now.endpoint !== settings.endpoint || now.model !== settings.model) {
+    throw new Error("The service or model changed in the JevIt manager. Triage again to use it.", { cause: "halt" });
+  }
+  const state = await emailState(id, settings.bodyChars).catch(during("Reading the mail"));
   const key = await scoreKey(state, settings.endpoint);
   const [sigs, stored] = await Promise.all([questionSigs(settings.recipes, settings.model), messenger.storage.local.get(key).then((o) => o[key])]);
   const { answers: kept, missing } = reuse(settings.recipes, sigs, stored);
@@ -464,7 +515,7 @@ async function classify(id, settings) {
   const answers = { ...kept, ...response?.answers };
   if (response) {
     // ponytail: serial() only covers this page; a popup and a background batch finishing at the same moment can drop one count
-    await serial(async () => messenger.storage.local.set({ usage: addUsage(await loadUsage(), month, response.usage?.input_tokens ?? 0, settings.pricePerMtok) }));
+    await serial(async () => messenger.storage.local.set({ usage: addUsage(await loadUsage(), month, response.usage?.input_tokens ?? 0, settings.pricePerMtok, response.usage?.cost) }));
     await messenger.storage.local.set({ [key]: { ...remember(settings.recipes, sigs, answers), at: Date.now() } });
   }
   const keys = decide(settings.recipes, answers, known);
@@ -528,12 +579,34 @@ async function knownSender(author) {
 async function applyRecipes(id, recipes, keys, answers, triaged = false, { act = keys, unsure = false } = {}) {
   const extra = [...(triaged ? [TRIAGED] : []), ...(unsure ? [UNSURE] : [])];
   const ours = new Set([...recipes.map((r) => r.key), UNSURE.key]);
-  const m = await messenger.messages.get(id);
+  const m = await messenger.messages.get(id).catch(during("Reading the mail"));
   const { update, folder } = plan(recipes, act, answers);
   const tags = new Set([...m.tags.filter((t) => !ours.has(t)), ...keys, ...extra.map((t) => t.key)]);
-  await messenger.messages.update(id, { ...update, tags: [...tags] });
+  await messenger.messages.update(id, { ...update, tags: [...tags] }).catch(during("Tagging the mail"));
   const target = folder && m.folder ? await resolveFolder(folder, m.folder.accountId) : folder;
-  if (target && target !== m.folder?.id) await messenger.messages.move([id], target);
+  if (target && target !== m.folder?.id) await messenger.messages.move([id], target).catch(during("Moving the mail"));
+}
+
+// The step that failed, in front of the error. Halts keep their own message and cause.
+const during = (step) => (e) => {
+  throw e?.cause === "halt" ? e : new Error(`${step}: ${e?.message ?? e}`, { cause: e?.cause });
+};
+
+// Runs fn(id) for a mail from a list. Thunderbird can drop a mail's id while Jev answers (an add-on restart, or the
+// header replaced); then the mail is found again by its Message-ID and fn runs once more. Only in the same folder:
+// mail moved meanwhile (to Junk by Thunderbird's junk filter, to Trash) is left alone, so a move recipe can't pull
+// it back out. That error has cause "gone": nothing went wrong, so triage counts it instead of logging it.
+async function onMessage(m, fn) {
+  try {
+    return await fn(m.id);
+  } catch (e) {
+    if (!/Message not found/.test(e?.message) || !m.headerMessageId) throw e;
+    const { messages } = await messenger.messages.query({ headerMessageId: m.headerMessageId, folderId: m.folder?.id });
+    const again = messages.find((x) => x.folder?.id === m.folder?.id);
+    if (!again) throw new Error(`${e.message} It was moved or deleted while JevIt worked on it.`, { cause: "gone" });
+    m.id = again.id; // the next step uses the new id too
+    return fn(m.id);
+  }
 }
 
 // "light" or "dark": the chosen colour set, or Thunderbird's current theme when set to follow it.
@@ -588,5 +661,5 @@ async function* iterate(list) {
 }
 
 if (typeof module !== "undefined") {
-  module.exports = { DEFAULTS, RECIPE_LIBRARY, cleanBody, linkHosts, updateRecipes, questionFor, questionsFor, reuse, remember, classify, judgedBefore, pruneScores, decide, certainty, dmarcPass, plan, addExample, draftRecipe, parseBackup, askJev, resolveFolder, applyRecipes, knownSender, emailState, authServId, trustedServer, addUsage, budgetLeft, money, syncTags, colorFor, activeScheme, PALETTE };
+  module.exports = { onMessage, JEV_API, OPENROUTER_API, localApi, serviceOf, receiver, connectionProblem, DEFAULTS, RECIPE_LIBRARY, cleanBody, linkHosts, updateRecipes, questionFor, questionsFor, reuse, remember, classify, judgedBefore, pruneScores, decide, certainty, dmarcPass, plan, addExample, draftRecipe, parseBackup, askJev, resolveFolder, applyRecipes, knownSender, emailState, authServId, trustedServer, addUsage, budgetLeft, money, syncTags, colorFor, activeScheme, PALETTE };
 }

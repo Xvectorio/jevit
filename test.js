@@ -1,11 +1,30 @@
-// node test.js  (set TYPESAFE_API_KEY to also run the default recipes against Jev)
+// node test.js  (set TYPESAFE_API_KEY or OPENROUTER_API_KEY to also run the default recipes against Jev there)
 const assert = require("node:assert");
-const { DEFAULTS, RECIPE_LIBRARY, cleanBody, linkHosts, updateRecipes, questionFor, questionsFor, reuse, remember, classify, judgedBefore, pruneScores, decide, certainty, dmarcPass, plan, addExample, draftRecipe, parseBackup, askJev, resolveFolder, applyRecipes, knownSender, emailState, authServId, trustedServer, addUsage, budgetLeft, money, syncTags, colorFor, activeScheme, PALETTE } = require("./jev.js");
+const { onMessage, JEV_API, OPENROUTER_API, localApi, serviceOf, receiver, connectionProblem, DEFAULTS, RECIPE_LIBRARY, cleanBody, linkHosts, updateRecipes, questionFor, questionsFor, reuse, remember, classify, judgedBefore, pruneScores, decide, certainty, dmarcPass, plan, addExample, draftRecipe, parseBackup, askJev, resolveFolder, applyRecipes, knownSender, emailState, authServId, trustedServer, addUsage, budgetLeft, money, syncTags, colorFor, activeScheme, PALETTE } = require("./jev.js");
 
 assert.equal(cleanBody("Hi\n> old quote\n\n\n\n  Bye  "), "Hi\n\nBye");
 assert.equal(cleanBody("x".repeat(9000)).length, 3000);
 assert.equal(cleanBody("x".repeat(9000), 500).length, 500);
 assert.equal(cleanBody("Deal\u200B\u034F ends: https://t.example.com/c/abc?u=1 (or <https://shop.example/x>)"), "Deal ends: t.example.com (or <shop.example>)");
+
+// Links in the body keep only their host: no user:password@, port, path, query or #fragment, with or without a path.
+assert.equal(cleanBody("https://u:p@host.example?x=1#f"), "host.example");
+assert.equal(cleanBody("https://u:p@host.example/reset?token=s3cret"), "host.example");
+assert.equal(cleanBody("http://host.example:8080/a?b=1"), "host.example", "port dropped, as in link hosts");
+assert.equal(cleanBody("HTTPS://User:Pw@Host.Example#frag"), "host.example");
+assert.equal(cleanBody("Go to https://u:p@host.example/x?t=1. Or (https://a.example?k=2), 'https://b.example#c'!"),
+  "Go to host.example. Or (a.example), 'b.example'!", "sentence punctuation stays");
+assert.equal(cleanBody("https://a@b@host.example/x"), "host.example");
+assert.equal(cleanBody("https://evil.example\\@good.example/x"), "evil.example", "a backslash ends the host, as in browsers");
+assert.equal(cleanBody("https://b\u00FCcher.example/x"), "xn--bcher-kva.example");
+// What the URL parser rejects still loses everything around its host-like part.
+assert.equal(cleanBody("http://u:p@[bad?x=1"), "[bad");
+assert.equal(cleanBody("https://u:p@host.example:99999/x?t=1"), "host.example");
+// mailto: keeps the address, not the prefilled subject or body.
+assert.equal(cleanBody("Write mailto:a@b.example?subject=x&body=token or <MAILTO:c@d.example#x>."), "Write a@b.example or <c@d.example>.");
+
+// A link text that is a URL is cut the same way.
+assert.deepEqual(linkHosts([{ href: "https://evil.example/r", text: "https://u:p@paypal.com/reset?token=1" }]), ["paypal.com \u2192 evil.example"]);
 
 // Link hosts: one per host, text next to where it really goes; no host, no entry; capped.
 assert.deepEqual(linkHosts([
@@ -57,6 +76,19 @@ assert.equal(budgetLeft({ budget: 1 }, u, "2026-11"), 1, "a new month starts wit
 assert.equal(budgetLeft({ budget: 0 }, u, "2026-10"), Infinity);
 assert.equal(budgetLeft({ budget: 0.0001 }, addUsage(u, "2026-10", 5000, 0.042), "2026-10") <= 0, true);
 assert.deepEqual([money(0.00021), money(1.5), money(0)], ["$0.00021", "$1.50", "$0.00"]);
+assert.equal(addUsage(null, "2026-10", 1000, 0.042, 0.00003).cost, 0.00003, "a cost OpenRouter reports counts instead of the estimate");
+
+// Services: the endpoint says which one, and the consent text who receives the mail.
+assert.deepEqual([serviceOf(JEV_API), serviceOf(OPENROUTER_API), serviceOf(localApi(9000)), serviceOf(undefined)], ["typesafe", "openrouter", "local", "typesafe"]);
+assert.equal(localApi(9000), "http://127.0.0.1:9000/v1/systemone");
+assert.equal(receiver(JEV_API, "openai/x"), "TypeSafe (api.typesafe.ai)", "the model only matters through OpenRouter");
+assert.equal(receiver(OPENROUTER_API, "jev-latest"), "OpenRouter (openrouter.ai), which passes it to TypeSafe");
+assert.equal(receiver(OPENROUTER_API, "~typesafe/jev-latest"), receiver(OPENROUTER_API, "typesafe/jev-1.13"));
+assert.equal(receiver(OPENROUTER_API, "openai/gpt-6-luna-decisions"), "OpenRouter (openrouter.ai) and openai, the provider of openai/gpt-6-luna-decisions");
+assert.equal(receiver(localApi(), "jev-latest"), "Open-Jev (127.0.0.1)");
+assert.equal(connectionProblem({ endpoint: OPENROUTER_API, apiKey: "", consent: true }), "no OpenRouter API key is set");
+assert.equal(connectionProblem({ endpoint: localApi(), apiKey: "", consent: true }), "", "Open-Jev needs no key");
+assert.equal(connectionProblem({ endpoint: JEV_API, apiKey: "k", consent: false }), "sending mail to TypeSafe is not allowed yet");
 
 // Known sender: Spam (skipKnown by default) can't match, other recipes still can.
 assert.deepEqual(decide(rs, { jev_spam: { noul: 0.99 }, jev_urgent: { noul: 0.9 } }, true), ["jev_urgent"]);
@@ -265,6 +297,10 @@ global.messenger = { folders: {
   const big = (await emailState(1, 3000)).email;
   assert.deepEqual([big.from.length, big.subject.length, big.to.length, big.to[0].length, big.cc], [1000, 1000, 20, 1000, []]);
   assert.deepEqual([big.attachments.length, big.attachments[0].length, big.headers["Reply-To"].length, big.links], [10, 200, 1000, []]);
+  assert.equal(big.headers["List-Unsubscribe"], undefined, "no header, none sent");
+  // List-Unsubscribe links carry a personal token: only the hosts and addresses go out.
+  messenger.messages.getFull = async () => ({ headers: { "list-unsubscribe": ["<https://u:p@list.example/unsub?t=s3cret>, <mailto:unsub@list.example?subject=s3cret>"] } });
+  assert.equal((await emailState(1, 3000)).email.headers["List-Unsubscribe"], "<list.example>, <unsub@list.example>");
 
   // A bounce Thunderbird can't list attachments for: names and types come from the MIME tree, attached mail isn't entered.
   messenger.messages.listAttachments = async () => { throw new Error("cannot convert message/delivery-status"); };
@@ -281,11 +317,13 @@ global.messenger = { folders: {
   // Stored scores: asking again is free; only recipes whose question changed (edited, taught) go to Jev again.
   const local = { consent: true, budget: 1 };
   let body = "Claim your prize", asked = [], urls = [];
-  global.fetch = async (url, { body: req, redirect }) => {
+  let auths = [];
+  global.fetch = async (url, { body: req, redirect, headers }) => {
     assert.equal(redirect, "error", "mail never follows a redirect");
     const { questions } = JSON.parse(req);
     asked.push(Object.keys(questions));
     urls.push(url);
+    auths.push(headers.Authorization);
     return { ok: true, json: async () => ({ answers: Object.fromEntries(Object.keys(questions).map((k) => [k, { noul: 0.95 }])), usage: { input_tokens: 1000 } }) };
   };
   global.messenger = {
@@ -313,8 +351,13 @@ global.messenger = { folders: {
   await classify(1, s2);
   const openJev = "http://127.0.0.1:8791/v1/systemone";
   const typesafeKeys = Object.keys(local).filter((k) => k.startsWith("score:"));
-  await classify(1, { ...s2, endpoint: openJev });
+  await assert.rejects(classify(1, { ...s2, endpoint: openJev }), /changed/, "consent given for one service doesn't carry over to a batch started on another");
+  await assert.rejects(classify(1, { ...s2, model: "openai/x" }), /changed/);
+  local.endpoint = openJev;
+  await classify(1, { ...s2, endpoint: openJev, apiKey: "" });
+  delete local.endpoint;
   assert.equal(urls[3], openJev, "a local Open-Jev endpoint is used when set");
+  assert.deepEqual([auths[0], auths[3]], ["Bearer k", undefined], "no Authorization header without a key");
   assert.deepEqual(asked[3], ["jev_spam", "jev_reply"], "TypeSafe's scores aren't reused for another endpoint");
   const [openJevKey] = Object.keys(local).filter((k) => k.startsWith("score:") && !typesafeKeys.includes(k));
   assert.ok(openJevKey, "another endpoint's scores are stored apart");
@@ -337,12 +380,36 @@ global.messenger = { folders: {
   assert.deepEqual(Object.keys(local).filter((k) => k.startsWith("score:")), [scored], "old and undated scores removed, recent kept");
   await pruneScores(Infinity);
   assert.deepEqual(Object.keys(local).filter((k) => k.startsWith("score:")), [], "Forget stored scores removes all");
+  // A mail's id gone stale while Jev answered: found again by Message-ID, in the same folder only.
+  const gone = () => Object.assign(new Error("Message not found: 93."), {});
+  let found = [], queried;
+  messenger.messages.query = async (q) => ((queried = q), { messages: found });
+  const mail = { id: 93, headerMessageId: "a@b", folder: { id: "f1" } };
+  found = [{ id: 7, folder: { id: "f1" } }];
+  const seen = [];
+  assert.equal(await onMessage(mail, async (id) => (seen.push(id), id === 93 ? Promise.reject(gone()) : "ok")), "ok");
+  assert.deepEqual([seen, mail.id, queried], [[93, 7], 7, { headerMessageId: "a@b", folderId: "f1" }], "retried once with the new id, kept for the next step");
+  found = [{ id: 8, folder: { id: "trash" } }];
+  await assert.rejects(onMessage({ ...mail, id: 93 }, async () => { throw gone(); }), (e) => e.cause === "gone" && /moved or deleted while JevIt worked on it/.test(e.message), "moved elsewhere: left alone, not an error");
+  await assert.rejects(onMessage(mail, async () => { throw new Error("Jev 500: x"); }), /^Error: Jev 500: x$/, "other errors pass through");
+  messenger.messages.update = async () => { throw gone(); };
+  messenger.messages.get = async () => ({ tags: [], folder: { id: "f1", accountId: "a" } });
+  await assert.rejects(applyRecipes(1, rs.slice(0, 1), [], {}), /^Error: Tagging the mail: Message not found: 93\.$/, "the error says which step failed");
+  local.consent = false;
+  messenger.storage.local.get = async (k) => Object.fromEntries(Object.entries(k).map(([key, d]) => [key, local[key] ?? d]));
+  await assert.rejects(classify(1, s2), (e) => e.cause === "halt" && !/Reading/.test(e.message), "a halt keeps its message and cause");
+  local.consent = true;
+
   assert.deepEqual(reuse(rs.slice(0, 2), ["a", "b"], { b: 0.4, c: 1 }), { answers: { jev_reply: { noul: 0.4 } }, missing: [rs[0]] });
   assert.deepEqual(remember(rs.slice(0, 2), ["a", "b"], { jev_spam: { noul: 0.9 } }), { a: 0.9 }, "only recipes with an answer");
   console.log("logic ok");
 })();
 
-if (process.env.TYPESAFE_API_KEY) {
+const live = {
+  TYPESAFE_API_KEY: { endpoint: JEV_API, models: ["jev-latest"] },
+  OPENROUTER_API_KEY: { endpoint: OPENROUTER_API, models: ["jev-latest", "typesafe/jev-1.13"] },
+};
+for (const [env, { endpoint, models }] of Object.entries(live)) if (process.env[env]) {
   const state = {
     me: "jan@example.com",
     email: {
@@ -351,11 +418,12 @@ if (process.env.TYPESAFE_API_KEY) {
       body: "We detected unusual activity. Verify your password within 24 hours at http://paypa1-verify.com or lose access.",
     },
   };
-  askJev({ apiKey: process.env.TYPESAFE_API_KEY, model: "jev-latest" }, state, questionsFor(RECIPE_LIBRARY)).then(({ answers: a, usage }) => {
-    console.log("usage", usage);
-    for (const r of RECIPE_LIBRARY) console.log(r.name.padEnd(18), a[r.key].noul.toFixed(2));
+  for (const model of models) askJev({ apiKey: process.env[env], model, endpoint }, state, questionsFor(RECIPE_LIBRARY)).then(({ answers: a, usage, ...rest }) => {
+    const lines = RECIPE_LIBRARY.map((r) => `${r.name.padEnd(18)} ${a[r.key].noul.toFixed(2)}`);
+    console.log(`${serviceOf(endpoint)} ${model}`, JSON.stringify({ usage, ...rest }), `\n${lines.join("\n")}`);
     assert.ok(decide(RECIPE_LIBRARY, a).includes("jev_spam"), "phishing mail should match spam");
     assert.ok(!decide(RECIPE_LIBRARY, a).includes("jev_newsletter"));
-    console.log("live ok");
+    assert.equal(typeof usage?.input_tokens, "number", "usage reports input tokens");
+    console.log(`live ok: ${serviceOf(endpoint)} ${model}`);
   });
 }
