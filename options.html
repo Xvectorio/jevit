@@ -150,7 +150,7 @@
       <fieldset>
         <div class="row">
           <label title="Shown in menus and as the tag's name in Thunderbird.">Name <input type="text" name="name" required></label>
-          <label title="The tag's internal name: lowercase letters, digits and _, unique per recipe. If you change it, mail tagged earlier keeps the old tag.">Tag key <input type="text" name="key" pattern="[a-z0-9_]+" required spellcheck="false"></label>
+          <label title="The tag's internal name: lowercase letters, digits and _, unique per recipe. If you change it, mail tagged earlier keeps the old tag. The Spam shortcuts and the Connection card's known-sender switch use the key jev_spam.">Tag key <input type="text" name="key" pattern="[a-z0-9_]+" required spellcheck="false"></label>
           <label title="The tag's colour on a dark and on a light Thunderbird theme.">Colours (dark · light) <span class="pair"><input type="color" name="color" title="Dark theme"><input type="color" name="colorLight" title="Light theme"></span></label>
           <label title="How sure Jev must be before the recipe matches, from 0 to 1. 0.8 means 80% sure. Raise it for recipes that move or junk mail.">Threshold <input type="number" name="threshold" min="0" max="1" step="0.05"></label>
         </div>
