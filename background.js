@@ -173,6 +173,10 @@ async function buildMenus() {
   add({ id: "help", parentId: "root", title: "JevIt help" });
 }
 
+// One rebuild at a time: a removeAll landing between another rebuild's creates leaves an old or jumbled menu.
+let menusBuilt = Promise.resolve();
+const rebuildMenus = () => (menusBuilt = menusBuilt.then(buildMenus).catch((e) => logError("Menus", e)));
+
 messenger.menus.onClicked.addListener((info) => {
   const [what, key] = String(info.menuItemId).split(":");
   const list = info.selectedMessages;
@@ -219,12 +223,12 @@ messenger.runtime.onMessage.addListener((message) => {
 });
 
 messenger.storage.onChanged.addListener((changes) => {
-  if (changes.recipes) buildMenus();
+  if (changes.recipes) rebuildMenus();
   if ("budget" in changes || "usage" in changes) showBudgetBadge().catch(console.error);
   if (["recipes", "colorScheme", "triagedName", "triagedColor", "triagedColorLight", "unsureName"].some((k) => k in changes)) resyncTags();
 });
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", resyncTags);
-buildMenus();
+rebuildMenus();
 resyncTags();
 showBudgetBadge().catch(console.error);
 pruneDaily();
