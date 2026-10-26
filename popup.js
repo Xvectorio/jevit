@@ -38,14 +38,21 @@ $("#help").onclick = () => messenger.tabs.create({ url: "help.html" });
   $("#apply").disabled = false;
 })();
 
+// Off while it runs, so a second click can't start it twice. After an error it can be clicked again: the examples
+// already stored aren't added twice (learn).
 $("#apply").onclick = async () => {
-  const checked = settings.recipes.filter((r, i) => $(`#c${i}`).checked).map((r) => r.key);
-  if ($("#teach").checked) {
-    const wrong = settings.recipes.filter((r) => checked.includes(r.key) !== result.keys.includes(r.key));
-    for (const r of wrong) addExample(r, result.state.email, checked.includes(r.key));
-    if (wrong.length) await messenger.storage.local.set({ recipes: settings.recipes });
+  $("#apply").disabled = true;
+  try {
+    const checked = settings.recipes.filter((r, i) => $(`#c${i}`).checked).map((r) => r.key);
+    if ($("#teach").checked) {
+      const wrong = settings.recipes.filter((r) => checked.includes(r.key) !== result.keys.includes(r.key));
+      if (wrong.length) await learn(wrong.map((r) => ({ key: r.key, example: exampleOf(result.state.email, checked.includes(r.key)) })));
+    }
+    await syncTags(settings);
+    await applyRecipes(msgId, settings.recipes, checked, result.answers, settings.triagedTag);
+    window.close();
+  } catch (e) {
+    status(`Couldn't apply: ${e.message}`);
+    $("#apply").disabled = false;
   }
-  await syncTags(settings);
-  await applyRecipes(msgId, settings.recipes, checked, result.answers, settings.triagedTag);
-  window.close();
 };

@@ -32,13 +32,14 @@ async function triageList(list, manual) {
   let failed = 0, skipped = 0, excluded = 0, moved = 0, judged = 0, free = 0, review = 0, firstError, halted, stopped;
   const matched = new Map(); // recipe key -> mails it matched
   running++;
+  const { signal } = stopping; // the toolbar button's Stop; it also aborts requests on their way (classify)
   try {
     // A few mails at a time, all pulling from one list; a break in one ends the list for all.
     // ponytail: fixed 4 in flight (~4 req/s, well under the 1200 req/min limit); 429s back off in askJev
     const messages = iterate(list);
     await Promise.all(Array.from({ length: 4 }, async () => {
       for await (const m of messages) {
-        if (stop) break;
+        if (signal.aborted) break;
         if (s.excludedAccounts.includes(m.folder?.accountId)) {
           excluded++;
           continue;
@@ -50,11 +51,21 @@ async function triageList(list, manual) {
             skipped++;
             continue;
           }
-          const { keys, answers, act, unsure, paid } = await onMessage(m, (id) => classify(id, s));
-          await onMessage(m, (id) => applyRecipes(id, s.recipes, keys, answers, s.triagedTag, { act, unsure }));
+          const { key, retry, keys, answers, act, unsure, paid } = await onMessage(m, (id) => classify(id, s, signal));
+          // Its scores are stored by now. If the mail isn't tagged and moved after all, they're marked so the next
+          // triage doesn't skip it as done; they're reused, so that's free.
+          try {
+            await allowed(s, signal); // a Stop, or consent unticked, while Jev answered: leave the mail as it was
+            await onMessage(m, (id) => applyRecipes(id, s.recipes, keys, answers, s.triagedTag, { act, unsure }));
+          } catch (e) {
+            await markRetry(key, true).catch(console.error);
+            throw e;
+          }
+          if (retry) await markRetry(key, false).catch(console.error);
           judged++, free += !paid, review += unsure;
           for (const k of keys) matched.set(k, (matched.get(k) ?? 0) + 1);
         } catch (e) {
+          if (e.cause === "stop") break; // you stopped it: not an error
           if (e.cause === "halt") {
             halted = e;
             logError("Triage stopped", e);
@@ -68,9 +79,9 @@ async function triageList(list, manual) {
         showBudgetBadge().catch(console.error);
       }
     }));
-    stopped = stop;
+    stopped = signal.aborted;
   } finally {
-    if (!--running) done = 0, stop = false;
+    if (!--running) done = 0, stopping = new AbortController();
     showBudgetBadge().catch(console.error);
   }
   if (manual) return notify(summary(s.recipes, { judged, free, review, matched, skipped, excluded, moved, failed, firstError, halted, stopped }), true);
@@ -97,17 +108,32 @@ function summary(recipes, { judged, free, review, matched, skipped, excluded, mo
 
 // Selected mails become a yes/no example for one recipe, and its tag (plus action on yes) is applied.
 // Mail from an excluded account is only tagged: examples ride along in every request to Jev.
+// A mail that fails is left out and the rest go on; the examples are stored at the end (learn), also when the
+// list itself breaks off, so the mails already tagged are learned too. Teach the failed ones again: no doubles.
 async function teach(list, key, yes) {
   const s = await loadSettings();
   const r = s.recipes.find((r) => r.key === key);
   if (!r) return console.warn(`JevIt: no recipe with tag key ${key}`);
   await syncTags(s);
-  for await (const m of iterate(list)) {
-    if (!s.excludedAccounts.includes(m.folder?.accountId)) addExample(r, (await emailState(m.id)).email, yes);
-    await applyRecipes(m.id, [r], yes ? [key] : [], {});
+  const taught = [];
+  let ok = 0, failed = 0, firstError;
+  try {
+    for await (const m of iterate(list)) {
+      try {
+        const email = !s.excludedAccounts.includes(m.folder?.accountId) && (await emailState(m.id)).email; // read before a move
+        await applyRecipes(m.id, [r], yes ? [key] : [], {});
+        if (email) taught.push({ key, example: exampleOf(email, yes) });
+        ok++;
+      } catch (e) {
+        failed++, (firstError ??= e), logError(m.subject || "(no subject)", e);
+      }
+    }
+  } finally {
+    if (taught.length) await learn(taught);
   }
-  await messenger.storage.local.set({ recipes: s.recipes });
+  if (failed) notify(`Teaching Jev failed for ${failed} of ${failed + ok} mail(s): ${firstError.message}`, true);
 }
+const teachFailed = (e) => (logError("Teaching Jev", e), notify(`Teaching Jev failed: ${e.message}`, true));
 
 // Hand the selected mails to the manager page, which opens a new unsaved recipe with them as yes examples.
 async function newRecipeFrom(list) {
@@ -141,7 +167,7 @@ messenger.menus.onClicked.addListener((info) => {
   const [what, key] = String(info.menuItemId).split(":");
   const list = info.selectedMessages;
   if (what === "triage") triageList(list, true).catch((e) => (logError("Triage", e), notify(`Jev triage failed: ${e.message}`, true)));
-  if (what === "yes" || what === "no") teach(list, key, what === "yes").catch((e) => logError("Teaching Jev", e));
+  if (what === "yes" || what === "no") teach(list, key, what === "yes").catch(teachFailed);
   if (what === "new") newRecipeFrom(list).catch((e) => logError("New recipe from mail", e));
   if (what === "help") messenger.tabs.create({ url: "help.html" });
 });
@@ -155,12 +181,12 @@ async function selectedMessages(tab) {
 
 messenger.commands.onCommand.addListener(async (command, tab) => {
   const yes = { "teach-spam": true, "teach-not-spam": false }[command];
-  if (yes !== undefined) teach(await selectedMessages(tab), "jev_spam", yes).catch((e) => logError("Teaching Jev", e));
+  if (yes !== undefined) teach(await selectedMessages(tab), "jev_spam", yes).catch(teachFailed);
 });
 
 // While triage runs, the toolbar button counts the mails done so far (the total isn't known up front:
 // big selections arrive in pages), and clicking it stops the run. Otherwise it shows "$" while this month's budget is used up.
-let running = 0, done = 0, stop = false;
+let running = 0, done = 0, stopping = new AbortController();
 async function showBudgetBadge() {
   if (running) {
     await messenger.browserAction.setBadgeText({ text: String(done) });
@@ -174,6 +200,14 @@ async function showBudgetBadge() {
 
 // Keep menus and tag colours current. Tag colours follow the colour set, or Thunderbird's theme on "auto".
 const resyncTags = async () => syncTags(await loadSettings()).catch((e) => logError("Tag sync", e));
+// The popup's requests are counted here too, and the popup's and the manager's recipe writes are done here:
+// usage and recipes change on this page only (inBackground).
+messenger.runtime.onMessage.addListener((message) => {
+  if (message?.countUsage) return countUsage(...message.countUsage);
+  if (message?.learn) return learn(...message.learn);
+  if (message?.saveSettings) return saveSettings(...message.saveSettings);
+});
+
 messenger.storage.onChanged.addListener((changes) => {
   if (changes.recipes) buildMenus();
   if ("budget" in changes || "usage" in changes) showBudgetBadge().catch(console.error);
@@ -184,6 +218,8 @@ buildMenus();
 resyncTags();
 showBudgetBadge().catch(console.error);
 pruneScores().catch((e) => console.error("JevIt: pruning stored scores failed", e));
+// The manager takes a draft as soon as it opens; one left from an earlier session never will be, and holds mail text.
+messenger.storage.local.remove("draft").catch(console.error);
 
 messenger.messages.onNewMailReceived.addListener(async (folder, list) => {
   if ((await loadSettings()).autoTriage) await triageList(list).catch((e) => (logError("Automatic triage", e), notify(`Jev triage failed: ${e.message}`, false)));
@@ -191,12 +227,14 @@ messenger.messages.onNewMailReceived.addListener(async (folder, list) => {
 
 messenger.runtime.onInstalled.addListener(async ({ reason }) => {
   if (reason === "install") return messenger.runtime.openOptionsPage();
-  // Only saved recipes need it: without any, the current defaults are used.
-  const { recipes } = await messenger.storage.local.get("recipes");
-  if (reason === "update" && recipes && updateRecipes(recipes)) await messenger.storage.local.set({ recipes });
+  // Only saved recipes need it: without any, the current defaults are used. In line with the other recipe writes (learn).
+  if (reason === "update") await serial(async () => {
+    const { recipes } = await messenger.storage.local.get("recipes");
+    if (recipes && updateRecipes(recipes)) await messenger.storage.local.set({ recipes });
+  });
 });
 messenger.browserAction.onClicked.addListener(() => {
   if (!running) return messenger.runtime.openOptionsPage();
-  stop = true;
+  stopping.abort(new Error("Stopped", { cause: "stop" }));
   notify(`Stopped triage after ${done} mail(s). The rest has no Triaged tag, so you can pick it up later.`, true);
 });

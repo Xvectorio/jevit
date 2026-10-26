@@ -59,6 +59,8 @@ meter { width: 120px; }
 .manager .hint { font-weight: 400; }
 .manager p.hint { margin: 0 0 12px; }
 #keyHint { color: var(--warn); }
+#keyHint.saved { color: var(--muted); }
+#removeKey { align-self: flex-start; padding: 2px 8px; font-size: 12px; }
 
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
 .row { display: grid; grid-template-columns: 2fr 2fr auto 90px; gap: 0 12px; align-items: end; }
