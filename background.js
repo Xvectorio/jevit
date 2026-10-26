@@ -184,6 +184,8 @@ buildMenus();
 resyncTags();
 showBudgetBadge().catch(console.error);
 pruneScores().catch((e) => console.error("JevIt: pruning stored scores failed", e));
+// The manager takes a draft as soon as it opens; one left from an earlier session never will be, and holds mail text.
+messenger.storage.local.remove("draft").catch(console.error);
 
 messenger.messages.onNewMailReceived.addListener(async (folder, list) => {
   if ((await loadSettings()).autoTriage) await triageList(list).catch((e) => (logError("Automatic triage", e), notify(`Jev triage failed: ${e.message}`, false)));
