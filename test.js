@@ -731,6 +731,8 @@ global.messenger = { folders: {
   failOn = undefined;
   await ctx.teach(mails(51, 52, 53), "jev_newsletter", true);
   assert.deepEqual(taught().sort(), ["Teach 51 true", "Teach 52 true", "Teach 53 true"], "taught again: no doubles");
+  // A shortcut whose recipe key was changed says so, instead of doing nothing.
+  await assert.rejects(ctx.teach(mails(51), "jev_gone", true), /no recipe has the tag key jev_gone/);
   // A list that breaks off still stores what was taught before, and the menu's handler says so.
   ctx.messenger.messages.continueList = async () => { throw new Error("List gone"); };
   await assert.rejects(ctx.teach({ ...mails(54), id: "more" }, "jev_newsletter", false), /List gone/);

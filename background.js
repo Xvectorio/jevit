@@ -123,7 +123,7 @@ function summary(recipes, { judged, free, review, matched, skipped, excluded, mo
 async function teach(list, key, yes) {
   const s = await loadSettings();
   const r = s.recipes.find((r) => r.key === key);
-  if (!r) return console.warn(`JevIt: no recipe with tag key ${key}`);
+  if (!r) throw new Error(`no recipe has the tag key ${key}. The Spam shortcuts teach the recipe with that key: set it back in the JevIt manager.`);
   await syncTags(s);
   const taught = [];
   let ok = 0, failed = 0, firstError;
