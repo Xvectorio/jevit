@@ -364,6 +364,7 @@ global.messenger = { folders: {
     e.getAttribute = (a) => attrs[a] ?? null;
     e.hasAttribute = (a) => Object.hasOwn(attrs, a);
     e.remove = () => e.parent && (e.parent.kids = e.parent.kids.filter((k) => k !== e));
+    e.after = (text) => e.parent && e.parent.kids.splice(e.parent.kids.indexOf(e) + 1, 0, text);
     Object.defineProperty(e, "textContent", { get: () => e.kids.map((k) => (typeof k === "string" ? k : k.textContent)).join("") });
     return e;
   };
@@ -388,11 +389,11 @@ global.messenger = { folders: {
     el("style", {}, ".x { color: red }"),
   ));
   const shown = (await emailState(1, 3000)).email;
-  assert.equal(shown.body, "Your parcel is waiting. Track itKind regards Shop", "only the text a reader sees");
+  assert.equal(shown.body, "Your parcel is waiting. Track it\nKind regards Shop", "only the text a reader sees, a line per block");
   assert.deepEqual(shown.links, ["Track it → evil.example", "Shop → shop.example"], "hidden links are left out");
-  // With a plain part, the body is plain, and the links still come from the HTML without the hidden ones.
-  messenger.messages.listInlineTextParts = async () => [{ contentType: "text/plain", content: "Your parcel is waiting." }, { contentType: "text/html", content: "<html>" }];
-  assert.deepEqual([(await emailState(1, 3000)).email.body, (await emailState(1, 3000)).email.links.length], ["Your parcel is waiting.", 2]);
+  // A plain part that says something else isn't what the reader sees: body and links come from the HTML.
+  messenger.messages.listInlineTextParts = async () => [{ contentType: "text/plain", content: "Hi, see you Thursday." }, { contentType: "text/html", content: "<html>" }];
+  assert.deepEqual([(await emailState(1, 3000)).email.body, (await emailState(1, 3000)).email.links.length], ["Your parcel is waiting. Track it\nKind regards Shop", 2]);
   // Ten hidden links can't push the real one out of the MAX_LINKS.
   html = () => dom(el("body", {}, el("div", { style: "display:none" }, ...Array.from({ length: 10 }, (_, i) => el("a", { href: `https://brand${i}.example` }, "x"))),
     el("a", { href: "https://evil.example" }, "Log in")));

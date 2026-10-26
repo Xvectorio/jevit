@@ -578,9 +578,11 @@ function stripHidden(doc) {
   doc.querySelectorAll("[hidden], [style]").forEach((e) => (e.hasAttribute("hidden") || hiddenStyle(e.getAttribute("style"))) && e.remove());
 }
 
-// Text of an HTML body: without CSS and scripts, which textContent would otherwise keep.
+// Text of an HTML body: without CSS and scripts, which textContent would otherwise keep, and with a line break after
+// each block, which textContent would otherwise run together ("Track itKind regards").
 function htmlText(doc) {
   doc.querySelectorAll("style, script, noscript, template").forEach((e) => e.remove());
+  doc.querySelectorAll("br, p, div, li, tr, td, th, h1, h2, h3, h4, h5, h6, blockquote, table").forEach((e) => e.after("\n"));
   return doc.body.textContent;
 }
 
@@ -594,12 +596,13 @@ async function emailState(id, bodyChars) {
   const parts = await messenger.messages.listInlineTextParts(id);
   const plain = parts.find((p) => p.contentType === "text/plain");
   const html = parts.find((p) => p.contentType === "text/html");
-  // Links come from the HTML part even when the plain part is the body: that's where the sender can hide where they go.
+  // Body and links come from the HTML part when there is one: Thunderbird shows that part, and the sender can make the
+  // plain part say something else entirely.
   // Hidden elements go first, so hidden links can't push the real ones out of the MAX_LINKS.
   const doc = html && new DOMParser().parseFromString(html.content, "text/html");
   if (doc) stripHidden(doc);
   const links = doc ? linkHosts([...doc.querySelectorAll("a[href]")].map((a) => ({ href: a.getAttribute("href"), text: a.textContent }))) : [];
-  const body = plain ? plain.content : doc ? htmlText(doc) : "";
+  const body = doc ? htmlText(doc) : plain?.content ?? "";
   const full = await messenger.messages.getFull(id);
   // Thunderbird can fail to list a bounce's attachments (message/delivery-status); the MIME tree still has them.
   const listed = await messenger.messages.listAttachments(id).catch((e) => {
