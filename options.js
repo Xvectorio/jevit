@@ -3,6 +3,10 @@ const SPAM_KEY = "jev_spam"; // the Connection switch "Never tag … as Spam" mi
 const FIELDS = ["name", "key", "color", "colorLight", "question", "yes", "no", "action", "folder"];
 const options = (select, entries) => select.replaceChildren(...entries.map(([value, text]) => new Option(text, value)));
 let s, folders, parents, defaultAccount, sharedNames, accounts;
+// Each recipe's examples as last read from storage, by key: Save and new examples from teaching keep what the form
+// changed since (mergeExamples). Copies: ✕ takes an example out of the form's list in place.
+let seen = {};
+const examplesOf = (recipes) => Object.fromEntries(recipes.map((r) => [r.key, [...r.examples]]));
 // Recipe keys whose card / example list is expanded, kept across render().
 const openRecipes = new Set();
 const openExamples = new Set();
@@ -385,8 +389,19 @@ async function save() {
       `Fix “${bad?.name ?? "duplicate tag key"}”: key a-z0-9_ and unique, question set, threshold 0–1, folder chosen for moves.`;
     return;
   }
-  await messenger.storage.local.set(s);
-  await syncTags(s);
+  // Examples taught while the form was open are kept, and come back into the form through storage.onChanged below.
+  try {
+    await saveSettings(s, seen);
+  } catch (e) {
+    $("#status").textContent = `Not saved: ${e.message}`;
+    return;
+  }
+  try {
+    await syncTags(s);
+  } catch (e) {
+    $("#status").textContent = `Saved, but updating the tags in Thunderbird failed: ${e.message}. Click Save to try again.`;
+    return;
+  }
   $("#status").textContent = "Saved.";
 }
 document.querySelectorAll(".save").forEach((b) => (b.onclick = save));
@@ -417,6 +432,7 @@ async function loadFolders() {
 (async () => {
   await loadFolders();
   s = await loadSettings();
+  seen = examplesOf(s.recipes);
   render();
   showErrors();
   await takeDraft();
@@ -425,13 +441,13 @@ async function loadFolders() {
     if (changes.usage) showUsage();
     if (changes.errors) showErrors();
     if (changes.authServers) showAuthServers();
-    // Examples taught from the popup or context menu while this page is open; keep them so Save doesn't drop them.
+    // Examples taught from the popup or context menu while this page is open: added to the form, so it shows them.
+    // Examples removed in the form and not saved yet stay removed.
     if (changes.recipes?.newValue) {
       read();
-      for (const r of s.recipes) {
-        const stored = changes.recipes.newValue.find((x) => x.key === r.key);
-        if (stored) r.examples = stored.examples;
-      }
+      const stored = examplesOf(changes.recipes.newValue);
+      for (const r of s.recipes) r.examples = mergeExamples(r.examples, stored[r.key], seen[r.key]);
+      seen = stored;
       render();
     }
   });

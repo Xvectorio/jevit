@@ -108,17 +108,32 @@ function summary(recipes, { judged, free, review, matched, skipped, excluded, mo
 
 // Selected mails become a yes/no example for one recipe, and its tag (plus action on yes) is applied.
 // Mail from an excluded account is only tagged: examples ride along in every request to Jev.
+// A mail that fails is left out and the rest go on; the examples are stored at the end (learn), also when the
+// list itself breaks off, so the mails already tagged are learned too. Teach the failed ones again: no doubles.
 async function teach(list, key, yes) {
   const s = await loadSettings();
   const r = s.recipes.find((r) => r.key === key);
   if (!r) return console.warn(`JevIt: no recipe with tag key ${key}`);
   await syncTags(s);
-  for await (const m of iterate(list)) {
-    if (!s.excludedAccounts.includes(m.folder?.accountId)) addExample(r, (await emailState(m.id)).email, yes);
-    await applyRecipes(m.id, [r], yes ? [key] : [], {});
+  const taught = [];
+  let ok = 0, failed = 0, firstError;
+  try {
+    for await (const m of iterate(list)) {
+      try {
+        const email = !s.excludedAccounts.includes(m.folder?.accountId) && (await emailState(m.id)).email; // read before a move
+        await applyRecipes(m.id, [r], yes ? [key] : [], {});
+        if (email) taught.push({ key, example: exampleOf(email, yes) });
+        ok++;
+      } catch (e) {
+        failed++, (firstError ??= e), logError(m.subject || "(no subject)", e);
+      }
+    }
+  } finally {
+    if (taught.length) await learn(taught);
   }
-  await messenger.storage.local.set({ recipes: s.recipes });
+  if (failed) notify(`Teaching Jev failed for ${failed} of ${failed + ok} mail(s): ${firstError.message}`, true);
 }
+const teachFailed = (e) => (logError("Teaching Jev", e), notify(`Teaching Jev failed: ${e.message}`, true));
 
 // Hand the selected mails to the manager page, which opens a new unsaved recipe with them as yes examples.
 async function newRecipeFrom(list) {
@@ -152,7 +167,7 @@ messenger.menus.onClicked.addListener((info) => {
   const [what, key] = String(info.menuItemId).split(":");
   const list = info.selectedMessages;
   if (what === "triage") triageList(list, true).catch((e) => (logError("Triage", e), notify(`Jev triage failed: ${e.message}`, true)));
-  if (what === "yes" || what === "no") teach(list, key, what === "yes").catch((e) => logError("Teaching Jev", e));
+  if (what === "yes" || what === "no") teach(list, key, what === "yes").catch(teachFailed);
   if (what === "new") newRecipeFrom(list).catch((e) => logError("New recipe from mail", e));
   if (what === "help") messenger.tabs.create({ url: "help.html" });
 });
@@ -166,7 +181,7 @@ async function selectedMessages(tab) {
 
 messenger.commands.onCommand.addListener(async (command, tab) => {
   const yes = { "teach-spam": true, "teach-not-spam": false }[command];
-  if (yes !== undefined) teach(await selectedMessages(tab), "jev_spam", yes).catch((e) => logError("Teaching Jev", e));
+  if (yes !== undefined) teach(await selectedMessages(tab), "jev_spam", yes).catch(teachFailed);
 });
 
 // While triage runs, the toolbar button counts the mails done so far (the total isn't known up front:
@@ -185,8 +200,13 @@ async function showBudgetBadge() {
 
 // Keep menus and tag colours current. Tag colours follow the colour set, or Thunderbird's theme on "auto".
 const resyncTags = async () => syncTags(await loadSettings()).catch((e) => logError("Tag sync", e));
-// The popup's requests are counted here too: usage changes on this page only (countUsage).
-messenger.runtime.onMessage.addListener((message) => message?.countUsage && countUsage(...message.countUsage));
+// The popup's requests are counted here too, and the popup's and the manager's recipe writes are done here:
+// usage and recipes change on this page only (inBackground).
+messenger.runtime.onMessage.addListener((message) => {
+  if (message?.countUsage) return countUsage(...message.countUsage);
+  if (message?.learn) return learn(...message.learn);
+  if (message?.saveSettings) return saveSettings(...message.saveSettings);
+});
 
 messenger.storage.onChanged.addListener((changes) => {
   if (changes.recipes) buildMenus();
@@ -207,9 +227,11 @@ messenger.messages.onNewMailReceived.addListener(async (folder, list) => {
 
 messenger.runtime.onInstalled.addListener(async ({ reason }) => {
   if (reason === "install") return messenger.runtime.openOptionsPage();
-  // Only saved recipes need it: without any, the current defaults are used.
-  const { recipes } = await messenger.storage.local.get("recipes");
-  if (reason === "update" && recipes && updateRecipes(recipes)) await messenger.storage.local.set({ recipes });
+  // Only saved recipes need it: without any, the current defaults are used. In line with the other recipe writes (learn).
+  if (reason === "update") await serial(async () => {
+    const { recipes } = await messenger.storage.local.get("recipes");
+    if (recipes && updateRecipes(recipes)) await messenger.storage.local.set({ recipes });
+  });
 });
 messenger.browserAction.onClicked.addListener(() => {
   if (!running) return messenger.runtime.openOptionsPage();
