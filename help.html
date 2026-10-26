@@ -41,7 +41,7 @@
         <li>Open the manager with the <b>JevIt</b> toolbar button (except while triage runs: then a click stops the run). It also opens by itself after installing.</li>
         <li>Pick the <b>Service</b> that runs Jev: <b>TypeSafe</b> (the default), <b>OpenRouter</b>, or <b>Open-Jev on this computer</b>.</li>
         <li>Read who receives your mail and tick <b>“JevIt may send the content of emails I triage to …”</b>. Nothing is sent before you do.</li>
-        <li>Paste your <b>API key</b> for that service (from typesafe.ai or openrouter.ai/keys; Open-Jev only needs one if your server asks). It is saved when you leave the field.</li>
+        <li>Paste your <b>API key</b> for that service (from typesafe.ai or openrouter.ai/keys; Open-Jev only needs one if your server asks). It is saved when you leave the field and never shown again. Paste a new one to replace it, or click <b>Remove key</b>.</li>
         <li>Optional: tick <b>Automatically run recipes on new mail</b>, then click <b>Save</b>.</li>
         <li>Try it: open an email and click <b>JevIt</b> in the message header to see what Jev thinks.</li>
       </ol>
@@ -248,7 +248,9 @@
         <li>TypeSafe (api.typesafe.ai) and OpenRouter (openrouter.ai) are reached over HTTPS. With OpenRouter, mail goes to OpenRouter and to the provider of the model you select; their policies apply.
           Open-Jev is reached on this computer (127.0.0.1) and stays there, unless your server sends it on.</li>
         <li>Nothing is sent to the JevIt author. There's no tracking or analytics.</li>
-        <li>Your key, recipes, settings and usage counters stay in Thunderbird. The known-sender check runs locally.</li>
+        <li>Your API keys, recipes with their examples (sender, subject and a short snippet), Jev's scores, settings and usage counters stay in Thunderbird. The known-sender check runs locally.</li>
+        <li>They are stored in your Thunderbird profile without encryption: anyone with access to the profile can read them. The manager never shows a saved key.
+          Use disk encryption, and an API key with a low spending limit.</li>
         <li>Untick consent to stop all requests immediately. JevIt is not affiliated with TypeSafe.</li>
       </ul>
     </section>

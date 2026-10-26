@@ -1,6 +1,6 @@
 // node test.js  (set TYPESAFE_API_KEY or OPENROUTER_API_KEY to also run the default recipes against Jev there)
 const assert = require("node:assert");
-const { onMessage, JEV_API, OPENROUTER_API, localApi, serviceOf, receiver, connectionProblem, DEFAULTS, RECIPE_LIBRARY, cleanBody, linkHosts, updateRecipes, questionFor, questionsFor, reuse, remember, classify, judgedBefore, pruneScores, decide, certainty, dmarcPass, plan, addExample, draftRecipe, parseBackup, askJev, resolveFolder, applyRecipes, knownSender, emailState, authServId, trustedServer, addUsage, budgetLeft, money, syncTags, colorFor, activeScheme, PALETTE } = require("./jev.js");
+const { onMessage, JEV_API, OPENROUTER_API, localApi, serviceOf, receiver, connectionProblem, storeKey, keySaved, DEFAULTS, RECIPE_LIBRARY, cleanBody, linkHosts, updateRecipes, questionFor, questionsFor, reuse, remember, classify, judgedBefore, pruneScores, decide, certainty, dmarcPass, plan, addExample, draftRecipe, parseBackup, askJev, resolveFolder, applyRecipes, knownSender, emailState, authServId, trustedServer, addUsage, budgetLeft, money, syncTags, colorFor, activeScheme, PALETTE } = require("./jev.js");
 
 assert.equal(cleanBody("Hi\n> old quote\n\n\n\n  Bye  "), "Hi\n\nBye");
 assert.equal(cleanBody("x".repeat(9000)).length, 3000);
@@ -70,6 +70,20 @@ assert.equal(receiver(localApi(), "jev-latest"), "Open-Jev (127.0.0.1)");
 assert.equal(connectionProblem({ endpoint: OPENROUTER_API, apiKey: "", consent: true }), "no OpenRouter API key is set");
 assert.equal(connectionProblem({ endpoint: localApi(), apiKey: "", consent: true }), "", "Open-Jev needs no key");
 assert.equal(connectionProblem({ endpoint: JEV_API, apiKey: "k", consent: false }), "sending mail to TypeSafe is not allowed yet");
+
+// The key field is write-only: empty keeps the stored key, typed replaces it, only Remove key clears it. Never erased by accident.
+const keysNow = { apiKey: "ts-old", apiKeys: { typesafe: "ts-old", openrouter: "or-key" } };
+assert.deepEqual(storeKey(keysNow, "typesafe", "typesafe", ""), keysNow, "an empty field keeps the key");
+assert.deepEqual(storeKey(keysNow, "typesafe", "typesafe", "  "), keysNow, "so does whitespace");
+assert.deepEqual(storeKey(keysNow, "typesafe", "typesafe", " ts-new "), { apiKey: "ts-new", apiKeys: { typesafe: "ts-new", openrouter: "or-key" } });
+assert.deepEqual(storeKey(keysNow, "typesafe", "typesafe", "", true), { apiKey: "", apiKeys: { typesafe: "", openrouter: "or-key" } }, "Remove key");
+assert.deepEqual(storeKey(keysNow, "typesafe", "typesafe", "ts-new", true).apiKey, "", "Remove key wins over a typed key");
+assert.deepEqual(storeKey(keysNow, "typesafe", "openrouter", ""), { apiKey: "or-key", apiKeys: keysNow.apiKeys }, "switching keeps both keys");
+assert.deepEqual(storeKey(keysNow, "typesafe", "local", ""), { apiKey: "", apiKeys: { ...keysNow.apiKeys, typesafe: "ts-old" } }, "a service without a key yet");
+assert.deepEqual(storeKey({ apiKey: "ts-old" }, "typesafe", "openrouter", ""), { apiKey: "", apiKeys: { typesafe: "ts-old" } }, "a key saved before `apiKeys` existed is kept");
+assert.deepEqual(storeKey({}, "typesafe", "typesafe", ""), { apiKey: "", apiKeys: { typesafe: "" } }, "nothing stored, nothing typed");
+assert.equal(keysNow.apiKeys.typesafe, "ts-old", "the stored keys aren't changed in place");
+assert.deepEqual([keySaved("sk-abcd1234wxyz"), keySaved("12345678"), keySaved("1234567"), keySaved("")], ["Key saved, ending in …wxyz", "Key saved, ending in …5678", "Key saved", "Key saved"]);
 
 // Known sender: Spam (skipKnown by default) can't match, other recipes still can.
 assert.deepEqual(decide(rs, { jev_spam: { noul: 0.99 }, jev_urgent: { noul: 0.9 } }, true), ["jev_urgent"]);

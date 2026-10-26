@@ -30,6 +30,16 @@ function connectionProblem({ endpoint, apiKey, consent }) {
     : !consent ? `sending mail to ${SERVICES[service].name} is not allowed yet`
     : "";
 }
+
+// The key field is write-only: a saved key is never loaded back into the page. An empty field keeps the stored key,
+// a typed key replaces it, and only Remove key clears it. `apiKey` is the key of service `from` (the stored one),
+// `apiKeys` every service's. Returns both after the field is saved and the service goes from `from` to `to`.
+function storeKey({ apiKey = "", apiKeys = {} }, from, to, typed, remove = false) {
+  const keys = { ...apiKeys, [from]: remove ? "" : typed.trim() || apiKey };
+  return { apiKey: keys[to] ?? "", apiKeys: keys };
+}
+// That a key is saved, without showing it: its last 4 characters, or none of a short key.
+const keySaved = (key) => (key.length < 8 ? "Key saved" : `Key saved, ending in …${key.slice(-4)}`);
 const HEADER_CHARS = 1000; // per header (and per address, subject, sender), so a sender can't inflate the request
 const MAX_RECIPIENTS = 20; // To and Cc each; enough to tell a personal mail from a mass mailing
 const MAX_EXAMPLES = 20; // per recipe, newest kept; examples ride along in every request (~100 tokens each)
@@ -646,5 +656,5 @@ async function* iterate(list) {
 }
 
 if (typeof module !== "undefined") {
-  module.exports = { onMessage, JEV_API, OPENROUTER_API, localApi, serviceOf, receiver, connectionProblem, DEFAULTS, RECIPE_LIBRARY, cleanBody, linkHosts, updateRecipes, questionFor, questionsFor, reuse, remember, classify, judgedBefore, pruneScores, decide, certainty, dmarcPass, plan, addExample, draftRecipe, parseBackup, askJev, resolveFolder, applyRecipes, knownSender, emailState, authServId, trustedServer, addUsage, budgetLeft, money, syncTags, colorFor, activeScheme, PALETTE };
+  module.exports = { onMessage, JEV_API, OPENROUTER_API, localApi, serviceOf, receiver, connectionProblem, storeKey, keySaved, DEFAULTS, RECIPE_LIBRARY, cleanBody, linkHosts, updateRecipes, questionFor, questionsFor, reuse, remember, classify, judgedBefore, pruneScores, decide, certainty, dmarcPass, plan, addExample, draftRecipe, parseBackup, askJev, resolveFolder, applyRecipes, knownSender, emailState, authServId, trustedServer, addUsage, budgetLeft, money, syncTags, colorFor, activeScheme, PALETTE };
 }
