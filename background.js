@@ -107,7 +107,7 @@ function summary(recipes, { judged, free, review, matched, skipped, excluded, mo
 }
 
 // Selected mails become a yes/no example for one recipe, and its tag (plus action on yes) is applied.
-// Mail from an excluded account is only tagged: examples ride along in every request to Jev.
+// Mail from an excluded account gets the tag and action but no example: examples ride along in every request to Jev.
 // A mail that fails is left out and the rest go on; the examples are stored at the end (learn), also when the
 // list itself breaks off, so the mails already tagged are learned too. Teach the failed ones again: no doubles.
 async function teach(list, key, yes) {

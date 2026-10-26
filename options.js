@@ -255,7 +255,7 @@ async function showUsage() {
   const current = usage?.month === month ? usage : emptyUsage();
   const budget = Number($("#budget").value);
   const line = (u) => `${u.requests.toLocaleString()} request(s) · ${u.inputTokens.toLocaleString()} tokens · ${money(u.cost)}`;
-  $("#usageMonthName").textContent = new Date().toLocaleString(undefined, { month: "long", year: "numeric" });
+  $("#usageMonthName").textContent = monthName(month);
   $("#usageMonth").textContent = line(current) + (budget > 0 ? ` of ${money(budget)}` : " (no budget limit)");
   $("#usageTotal").textContent = line(usage?.total ?? emptyUsage());
   $("#budgetMeter").hidden = !(budget > 0);

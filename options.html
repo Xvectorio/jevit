@@ -47,7 +47,7 @@
         </label>
         <label title="How much of an email's text is sent to Jev, after quoted replies and styling are removed and links are cut down to their host name. Less sends less of your mail, but Jev may miss details further down.">Text limit (characters)
           <input type="number" id="bodyChars" min="0" step="500">
-          <span class="hint">Default 3000. 0 sends no text: only sender, recipients, subject and headers.</span>
+          <span class="hint">Default 3000. 0 sends none of the text; everything else listed above, such as links and attachment names, is still sent.</span>
         </label>
       </div>
       <label class="check" title="Triage every new email in your inboxes and normal folders as it arrives. Mail that Thunderbird's junk filter moves to Junk meanwhile, usually a few seconds after it arrives, is left alone."><input type="checkbox" id="autoTriage"> Automatically run recipes on new mail</label>
@@ -62,7 +62,7 @@
           <span class="hint">Default 0.15. 0 turns the Unsure tag off.</span>
         </label>
       </div>
-      <div id="excludedAccounts" title="Mail in these accounts is never sent to Jev: not by automatic triage, selected-mail triage or the header popup, and never kept as a learned example. Teaching Jev with it only sets the tag."></div>
+      <div id="excludedAccounts" title="Mail in these accounts is never sent to Jev: not by automatic triage, selected-mail triage or the header popup, and never kept as a learned example. Teaching Jev with it sets the tag, and for “This is …” runs the recipe's action, but keeps no example."></div>
       <label class="check" id="spamKnownRow" title="Mail from people in your local address books, or people you've sent mail to, never gets the Spam tag, if your mail server confirms the sender with a DMARC pass. Checked inside Thunderbird; your contacts are never sent anywhere."><input type="checkbox" id="spamKnown"> Never tag mail from people I know as Spam (senders in my address books, or people I've sent mail to)</label>
       <p class="hint" id="authServers" title="A sender only counts as known when this server's DMARC check passed. JevIt finds it from the Authentication-Results header on your recent Inbox mail, inside Thunderbird."></p>
       <div class="grid2">

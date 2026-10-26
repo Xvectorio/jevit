@@ -19,12 +19,12 @@ Unofficial; not affiliated with TypeSafe.
 - Triage selected mail from the context menu, or automatically for new mail. Already triaged mail is skipped by default; mail whose triage failed is not.
 - Progress on the toolbar button while triaging. Click the button to stop a long run. When a manual run is done, one notification sums up what each recipe matched.
 - A Triaged tag on every mail Jev has judged (optional), and tag colours for both light and dark themes.
-- Careful with uncertain mail: star, mark read, junk and move only happen when Jev is at least 90% sure. Below that, and for near misses, mail gets an Unsure tag to review and teach Jev from.
+- Careful with uncertain mail: when triaging, star, mark read, junk and move only happen when Jev is at least 90% sure. Applying from the header popup, and teaching, always run the action you choose. Below 90%, and for near misses, mail gets an Unsure tag to review and teach Jev from.
 - Move matches to one folder, or to a folder of the same name in each account (such as each account's own Junk).
 - Jev sees where links really go (the host name behind each link text), which helps the Spam and Phishing recipes. Links are never opened.
 - Mail from your contacts, or from people you've written to, is never tagged as Spam, when your mail server's DMARC check confirms the sender. This is checked locally.
 - Exclude accounts: mail in them is never sent to Jev.
-- Jev's scores are remembered locally: the header popup, and triaging mail again after changing a threshold, cost nothing. Only edited or taught recipes are asked again.
+- Jev's scores are remembered locally: the header popup, and triaging mail again after changing a threshold (untick “Skip already triaged mail” first), cost nothing. Only edited or taught recipes are asked again.
 - Usage and a monthly budget (default $1) so costs stay in check.
 - Export and import recipes as a JSON backup.
 
@@ -45,7 +45,7 @@ TypeSafe (`api.typesafe.ai/v1/systemone`, the default), OpenRouter (`openrouter.
 The state holds the sender, To/Cc, subject, the cleaned body (3000 characters by default), the Authentication-Results, List-Unsubscribe and Reply-To headers,
 link text next to the host it really points to, attachment names and types, and your own address.
 Every recipe is a TypeSafe **Noul** (a yes/no probability) with yes/no criteria and up to 20 learned examples, all in the same request.
-A recipe matches at its threshold. Star, read, junk and move wait until Jev is at least 90% sure; near misses get the Unsure tag.
+A recipe matches at its threshold. In a triage, star, read, junk and move wait until Jev is at least 90% sure; near misses get the Unsure tag. Applying from the header popup, and teaching, always run the action.
 Rate limits (429/529) are retried with exponential backoff; a request without an answer in 60 seconds fails that mail, and so does an answer without a numeric score.
 A failed tag or move takes the Triaged tag off and marks the stored scores, so the next triage doesn't skip the mail and reuses them for free.
 Unticking consent, changing the service or model, and Stop abort requests already on their way, and their answers aren't applied.

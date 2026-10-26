@@ -1,7 +1,7 @@
 // node test.js  (set TYPESAFE_API_KEY or OPENROUTER_API_KEY to also run the default recipes against Jev there)
 const assert = require("node:assert");
 const fs = require("node:fs"), vm = require("node:vm");
-const { onMessage, markRetry, scoresIn, JEV_API, OPENROUTER_API, localApi, serviceOf, receiver, connectionProblem, storeKey, keySaved, DEFAULTS, RECIPE_LIBRARY, cleanBody, linkHosts, hiddenStyle, stripHidden, updateRecipes, questionFor, questionsFor, reuse, remember, classify, judgedBefore, pruneScores, decide, certainty, dmarcPass, plan, addExample, exampleOf, mergeExamples, learn, saveSettings, draftRecipe, parseBackup, askJev, haltRequests, countUsage, resolveFolder, applyRecipes, knownSender, emailState, authServId, trustedServer, addUsage, budgetLeft, money, syncTags, colorFor, activeScheme, PALETTE } = require("./jev.js");
+const { onMessage, markRetry, scoresIn, JEV_API, OPENROUTER_API, localApi, serviceOf, receiver, connectionProblem, storeKey, keySaved, DEFAULTS, RECIPE_LIBRARY, cleanBody, linkHosts, hiddenStyle, stripHidden, updateRecipes, questionFor, questionsFor, reuse, remember, classify, judgedBefore, pruneScores, decide, certainty, dmarcPass, plan, addExample, exampleOf, mergeExamples, learn, saveSettings, draftRecipe, parseBackup, askJev, haltRequests, countUsage, resolveFolder, applyRecipes, knownSender, emailState, authServId, trustedServer, addUsage, budgetLeft, monthName, money, syncTags, colorFor, activeScheme, PALETTE } = require("./jev.js");
 
 assert.equal(cleanBody("Hi\n> old quote\n\n\n\n  Bye  "), "Hi\n\nBye");
 assert.equal(cleanBody("x".repeat(9000)).length, 3000);
@@ -79,6 +79,8 @@ assert.deepEqual(mergeExamples([ex("d")], undefined, undefined), [ex("d")], "a n
 const rs = DEFAULTS.recipes;
 assert.deepEqual(decide(rs, { jev_spam: { noul: 0.8 }, jev_reply: { noul: 0.59 }, jev_urgent: { noul: 0.9 } }), ["jev_spam", "jev_urgent"]);
 // Usage: this month's counters restart with a new month; all-time keeps adding. Budget 0 = no limit.
+// The budget month is UTC, and so is its name: December's first day is never shown as November, whatever the time zone.
+assert.deepEqual([monthName("2026-09", "en-US"), monthName("2026-12", "en-US"), monthName("2027-01", "nl-NL")], ["September 2026", "December 2026", "januari 2027"]);
 let u = addUsage(null, "2026-09", 2000, 0.042);
 u = addUsage(u, "2026-09", 3000, 0.042);
 assert.deepEqual([u.requests, u.inputTokens, u.total.requests], [2, 5000, 2]);

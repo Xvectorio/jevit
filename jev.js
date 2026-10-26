@@ -455,6 +455,9 @@ async function askJev({ apiKey, model, endpoint }, state, questions, signal) {
 // --- Usage and budget (estimated from the token counts Jev returns) ---
 
 const monthOf = (date = new Date()) => date.toISOString().slice(0, 7); // "2026-09"
+// "September 2026" for "2026-09": the budget's month is UTC, so its name is too, also late on the last day of a month.
+const monthName = (month = monthOf(), locale = undefined) =>
+  new Date(`${month}-01T00:00:00Z`).toLocaleString(locale, { month: "long", year: "numeric", timeZone: "UTC" });
 const money = (usd) => `$${usd > 0 && usd < 0.01 ? usd.toFixed(5) : usd.toFixed(2)}`;
 const emptyUsage = () => ({ requests: 0, inputTokens: 0, cost: 0 });
 
@@ -843,5 +846,5 @@ async function* iterate(list) {
 }
 
 if (typeof module !== "undefined") {
-  module.exports = { onMessage, markRetry, scoresIn, JEV_API, OPENROUTER_API, localApi, serviceOf, receiver, connectionProblem, storeKey, keySaved, DEFAULTS, RECIPE_LIBRARY, cleanBody, linkHosts, hiddenStyle, stripHidden, updateRecipes, questionFor, questionsFor, reuse, remember, classify, judgedBefore, pruneScores, decide, certainty, dmarcPass, plan, addExample, exampleOf, mergeExamples, learn, saveSettings, draftRecipe, parseBackup, askJev, haltRequests, countUsage, resolveFolder, applyRecipes, knownSender, emailState, authServId, trustedServer, addUsage, budgetLeft, money, syncTags, colorFor, activeScheme, PALETTE };
+  module.exports = { onMessage, markRetry, scoresIn, JEV_API, OPENROUTER_API, localApi, serviceOf, receiver, connectionProblem, storeKey, keySaved, DEFAULTS, RECIPE_LIBRARY, cleanBody, linkHosts, hiddenStyle, stripHidden, updateRecipes, questionFor, questionsFor, reuse, remember, classify, judgedBefore, pruneScores, decide, certainty, dmarcPass, plan, addExample, exampleOf, mergeExamples, learn, saveSettings, draftRecipe, parseBackup, askJev, haltRequests, countUsage, resolveFolder, applyRecipes, knownSender, emailState, authServId, trustedServer, addUsage, budgetLeft, monthName, money, syncTags, colorFor, activeScheme, PALETTE };
 }
