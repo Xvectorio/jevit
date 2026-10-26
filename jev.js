@@ -579,7 +579,8 @@ const during = (step) => (e) => {
 
 // Runs fn(id) for a mail from a list. Thunderbird can drop a mail's id while Jev answers (an add-on restart, or the
 // header replaced); then the mail is found again by its Message-ID and fn runs once more. Only in the same folder:
-// mail moved meanwhile (to Trash, by a filter) is left alone, so a move recipe can't pull it back out.
+// mail moved meanwhile (to Junk by Thunderbird's junk filter, to Trash) is left alone, so a move recipe can't pull
+// it back out. That error has cause "gone": nothing went wrong, so triage counts it instead of logging it.
 async function onMessage(m, fn) {
   try {
     return await fn(m.id);
@@ -587,7 +588,7 @@ async function onMessage(m, fn) {
     if (!/Message not found/.test(e?.message) || !m.headerMessageId) throw e;
     const { messages } = await messenger.messages.query({ headerMessageId: m.headerMessageId, folderId: m.folder?.id });
     const again = messages.find((x) => x.folder?.id === m.folder?.id);
-    if (!again) throw new Error(`${e.message} It was moved or deleted while JevIt worked on it.`, { cause: e.cause });
+    if (!again) throw new Error(`${e.message} It was moved or deleted while JevIt worked on it.`, { cause: "gone" });
     m.id = again.id; // the next step uses the new id too
     return fn(m.id);
   }

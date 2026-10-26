@@ -367,7 +367,7 @@ global.messenger = { folders: {
   assert.equal(await onMessage(mail, async (id) => (seen.push(id), id === 93 ? Promise.reject(gone()) : "ok")), "ok");
   assert.deepEqual([seen, mail.id, queried], [[93, 7], 7, { headerMessageId: "a@b", folderId: "f1" }], "retried once with the new id, kept for the next step");
   found = [{ id: 8, folder: { id: "trash" } }];
-  await assert.rejects(onMessage({ ...mail, id: 93 }, async () => { throw gone(); }), /moved or deleted while JevIt worked on it/, "moved elsewhere: left alone");
+  await assert.rejects(onMessage({ ...mail, id: 93 }, async () => { throw gone(); }), (e) => e.cause === "gone" && /moved or deleted while JevIt worked on it/.test(e.message), "moved elsewhere: left alone, not an error");
   await assert.rejects(onMessage(mail, async () => { throw new Error("Jev 500: x"); }), /^Error: Jev 500: x$/, "other errors pass through");
   messenger.messages.update = async () => { throw gone(); };
   messenger.messages.get = async () => ({ tags: [], folder: { id: "f1", accountId: "a" } });

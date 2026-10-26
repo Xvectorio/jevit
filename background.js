@@ -29,7 +29,7 @@ async function triageList(list, manual) {
   const missing = connectionProblem(s); // a used-up budget halts in classify(), once a mail needs a request: stored scores are still free
   if (missing) return notify(`Can't triage with Jev: ${missing}. Click here to open the JevIt manager.`, manual);
   await syncTags(s);
-  let failed = 0, skipped = 0, excluded = 0, judged = 0, free = 0, review = 0, firstError, halted, stopped;
+  let failed = 0, skipped = 0, excluded = 0, moved = 0, judged = 0, free = 0, review = 0, firstError, halted, stopped;
   const matched = new Map(); // recipe key -> mails it matched
   running++;
   try {
@@ -60,9 +60,9 @@ async function triageList(list, manual) {
             logError("Triage stopped", e);
             break;
           }
-          failed++;
-          firstError ??= e;
-          logError(m.subject || "(no subject)", e);
+          // Moved away while JevIt worked on it: new mail often goes to Junk a few seconds after it arrives.
+          if (e.cause === "gone") moved++, console.info("JevIt: left alone,", m.subject, e.message);
+          else failed++, (firstError ??= e), logError(m.subject || "(no subject)", e);
         }
         done++;
         showBudgetBadge().catch(console.error);
@@ -73,7 +73,7 @@ async function triageList(list, manual) {
     if (!--running) done = 0, stop = false;
     showBudgetBadge().catch(console.error);
   }
-  if (manual) return notify(summary(s.recipes, { judged, free, review, matched, skipped, excluded, failed, firstError, halted, stopped }), true);
+  if (manual) return notify(summary(s.recipes, { judged, free, review, matched, skipped, excluded, moved, failed, firstError, halted, stopped }), true);
   // Automatic triage stays quiet unless something is wrong.
   if (halted) notify(`Jev triage stopped: ${halted.message}`, manual, halted.message);
   if (failed) notify(`Jev triage failed for ${failed} mail(s): ${firstError.message}`, manual, firstError.message.split(":")[0]);
@@ -81,7 +81,7 @@ async function triageList(list, manual) {
 
 // One notification at the end of a triage you started: what happened, most important first
 // (notifications replace each other, and long ones are cut off).
-function summary(recipes, { judged, free, review, matched, skipped, excluded, failed, firstError, halted, stopped }) {
+function summary(recipes, { judged, free, review, matched, skipped, excluded, moved, failed, firstError, halted, stopped }) {
   const hits = recipes.filter((r) => matched.has(r.key)).map((r) => `${r.name} ${matched.get(r.key)}`);
   return [
     `${stopped || halted ? "Stopped after" : "Triaged"} ${judged} mail(s)${hits.length ? `: ${hits.join(", ")}` : judged ? ", nothing matched" : ""}.`,
@@ -91,6 +91,7 @@ function summary(recipes, { judged, free, review, matched, skipped, excluded, fa
     free && `${free} from stored scores (free).`,
     skipped && `Skipped ${skipped} already triaged; untick “Skip already triaged mail” to redo them.`,
     excluded && `Skipped ${excluded} from excluded accounts.`,
+    moved && `Left ${moved} alone that moved away meanwhile.`,
   ].filter(Boolean).join(" ");
 }
 
