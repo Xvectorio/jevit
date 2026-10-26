@@ -1,6 +1,6 @@
 // node test.js  (set TYPESAFE_API_KEY or OPENROUTER_API_KEY to also run the default recipes against Jev there)
 const assert = require("node:assert");
-const { onMessage, JEV_API, OPENROUTER_API, localApi, serviceOf, receiver, connectionProblem, DEFAULTS, RECIPE_LIBRARY, cleanBody, linkHosts, updateRecipes, questionFor, questionsFor, reuse, remember, classify, judgedBefore, pruneScores, decide, certainty, dmarcPass, plan, addExample, draftRecipe, parseBackup, askJev, resolveFolder, applyRecipes, knownSender, emailState, authServId, trustedServer, addUsage, budgetLeft, money, syncTags, colorFor, activeScheme, PALETTE } = require("./jev.js");
+const { onMessage, JEV_API, OPENROUTER_API, localApi, serviceOf, receiver, connectionProblem, DEFAULTS, RECIPE_LIBRARY, cleanBody, linkHosts, updateRecipes, questionFor, questionsFor, reuse, remember, classify, judgedBefore, pruneScores, decide, certainty, dmarcPass, plan, addExample, draftRecipe, parseBackup, askJev, haltRequests, countUsage, resolveFolder, applyRecipes, knownSender, emailState, authServId, trustedServer, addUsage, budgetLeft, money, syncTags, colorFor, activeScheme, PALETTE } = require("./jev.js");
 
 assert.equal(cleanBody("Hi\n> old quote\n\n\n\n  Bye  "), "Hi\n\nBye");
 assert.equal(cleanBody("x".repeat(9000)).length, 3000);
@@ -376,6 +376,110 @@ global.messenger = { folders: {
   messenger.storage.local.get = async (k) => Object.fromEntries(Object.entries(k).map(([key, d]) => [key, local[key] ?? d]));
   await assert.rejects(classify(1, s2), (e) => e.cause === "halt" && !/Reading/.test(e.message), "a halt keeps its message and cause");
   local.consent = true;
+
+  // Requests on their way: unticking consent and Stop abort them, the answer isn't kept, and the budget holds in parallel.
+  const kept = { consent: true, budget: 1 };
+  global.messenger = {
+    storage: { local: {
+      get: async (k) => (typeof k === "string" ? { [k]: kept[k] } : Object.fromEntries(Object.entries(k).map(([key, d]) => [key, kept[key] ?? d]))),
+      set: async (o) => Object.assign(kept, o),
+    } },
+    messages: {
+      get: async (id) => ({ author: "x@spam.biz", subject: `Mail ${id}`, recipients: [], ccList: [] }),
+      listInlineTextParts: async () => [{ contentType: "text/plain", content: "Hi" }],
+      listAttachments: async () => [],
+      getFull: async () => ({ headers: {} }),
+    },
+  };
+  const scores = () => Object.keys(kept).filter((k) => k.startsWith("score:"));
+  const until = async (ok) => { for (let i = 0; !ok(); i++) await (i < 1000 ? new Promise(setImmediate) : assert.fail("timed out")); };
+  // Jev answers when told to (`answer`), or the request is aborted like a real fetch; `deaf` ignores the abort.
+  let sent = [], answer, deaf = false, status = 200;
+  global.fetch = (url, { body: req, signal }) => {
+    assert.ok(signal instanceof AbortSignal, "every request can be aborted, and times out");
+    const { questions } = JSON.parse(req);
+    sent.push(Object.keys(questions));
+    return new Promise((resolve, reject) => {
+      answer = () => resolve({ ok: status === 200, status, text: async () => "busy", json: async () => ({ answers: Object.fromEntries(Object.keys(questions).map((k) => [k, { noul: 0.95 }])), usage: { input_tokens: 1000 } }) });
+      if (!deaf) signal.addEventListener("abort", () => reject(signal.reason));
+    });
+  };
+  const s3 = { ...DEFAULTS, apiKey: "k", recipes: structuredClone(rs.slice(0, 2)) };
+  let pending = classify(11, s3);
+  await until(() => sent.length === 1);
+  kept.consent = false;
+  haltRequests({ consent: { oldValue: true, newValue: false } }); // as storage.onChanged reports it
+  await assert.rejects(pending, (e) => e.cause === "halt" && /consent was unticked/.test(e.message), "consent unticked mid-request aborts it");
+  assert.deepEqual([scores(), kept.usage.requests], [[], 1], "no scores kept; it reached Jev, so its estimate stays counted");
+  await assert.rejects(classify(12, s3), /Allow sending/);
+  assert.equal(sent.length, 1, "and nothing more is sent");
+  kept.consent = true;
+  haltRequests({ consent: { oldValue: false, newValue: true }, model: { oldValue: "jev-latest", newValue: "jev-latest" } }); // re-ticked, same model: nothing to stop
+  pending = classify(13, s3);
+  await until(() => sent.length === 2);
+  answer();
+  assert.deepEqual((await pending).keys, ["jev_spam", "jev_reply"]);
+  assert.deepEqual([kept.usage.requests, scores().length], [2, 1]);
+  assert.ok(kept.usage.inputTokens > 1000, "the answered request counts what Jev reported, the cut-off one its estimate");
+  const counted = { ...kept.usage };
+
+  // Stop: the request on its way is aborted; an answer that comes anyway (`deaf`) is paid for but not kept.
+  let stop = new AbortController();
+  pending = classify(14, s3, stop.signal);
+  await until(() => sent.length === 3);
+  stop.abort(new Error("Stopped", { cause: "stop" }));
+  await assert.rejects(pending, (e) => e.cause === "stop", "Stop aborts the request on its way");
+  deaf = true, stop = new AbortController();
+  pending = classify(15, s3, stop.signal);
+  await until(() => sent.length === 4);
+  stop.abort(new Error("Stopped", { cause: "stop" }));
+  answer();
+  await assert.rejects(pending, (e) => e.cause === "stop", "an answer after Stop isn't used");
+  assert.equal(scores().length, 1, "and isn't stored");
+  assert.deepEqual([kept.usage.requests, kept.usage.inputTokens - counted.inputTokens > 1000], [counted.requests + 2, true], "both counted");
+  await assert.rejects(classify(16, s3, stop.signal), (e) => e.cause === "stop");
+  assert.equal(sent.length, 4, "nothing is sent after Stop");
+  deaf = false;
+
+  // A request Jev turns away, or that waits out a rate limit when consent goes, isn't counted.
+  const before = kept.usage.requests;
+  status = 500;
+  pending = classify(17, s3);
+  await until(() => sent.length === 5);
+  answer();
+  await assert.rejects(pending, /Jev 500: busy/);
+  status = 429;
+  pending = classify(18, s3);
+  await until(() => sent.length === 6);
+  answer();
+  await new Promise(setImmediate);
+  haltRequests({ consent: { oldValue: true, newValue: false } });
+  await assert.rejects(pending, (e) => e.cause === "halt", "the wait before a retry ends too");
+  assert.deepEqual([kept.usage.requests, sent.length], [before, 6], "neither counted; no retry sent");
+  status = 200;
+
+  // The last of the budget: parallel mails count before they send, so only one starts.
+  kept.usage = { ...kept.usage, cost: 1 - 1e-9 };
+  const racing = Promise.allSettled([20, 21, 22, 23, 24, 25, 26, 27].map((id) => classify(id, s3)));
+  await until(() => sent.length === 7);
+  await new Promise(setImmediate);
+  answer();
+  const raced = await racing;
+  assert.deepEqual([raced.filter((r) => r.status === "fulfilled").length, sent.length], [1, 7], "one request, not eight");
+  assert.ok(raced.filter((r) => r.status === "rejected").every((r) => r.reason.cause === "halt" && /budget/.test(r.reason.message)));
+  assert.equal(kept.usage.requests, before + 1);
+
+  // The popup counts on the background page, so the two can't lose each other's counts.
+  const messages = [];
+  messenger.extension = { getBackgroundPage: () => ({}) };
+  messenger.runtime = { sendMessage: async (m) => (messages.push(m), true) };
+  assert.equal(await countUsage({ inputTokens: 5, pricePerMtok: 1 }, 2), true);
+  assert.deepEqual([messages, kept.usage.requests], [[{ countUsage: [{ inputTokens: 5, pricePerMtok: 1 }, 2] }], before + 1]);
+  messenger.extension.getBackgroundPage = () => globalThis; // on the background page itself: counted there
+  assert.equal(await countUsage({ inputTokens: 5, pricePerMtok: 1 }), true);
+  assert.deepEqual([messages.length, kept.usage.requests], [1, before + 2]);
+  const none = { requests: 0, inputTokens: 0, cost: 0 };
+  assert.deepEqual(addUsage({ month: "m", ...none, requests: 1, total: none }, "m", -20, 0, -1, -1), { month: "m", ...none, total: none }, "never below 0");
 
   assert.deepEqual(reuse(rs.slice(0, 2), ["a", "b"], { b: 0.4, c: 1 }), { answers: { jev_reply: { noul: 0.4 } }, missing: [rs[0]] });
   assert.deepEqual(remember(rs.slice(0, 2), ["a", "b"], { jev_spam: { noul: 0.9 } }), { a: 0.9 }, "only recipes with an answer");

@@ -32,13 +32,14 @@ async function triageList(list, manual) {
   let failed = 0, skipped = 0, excluded = 0, moved = 0, judged = 0, free = 0, review = 0, firstError, halted, stopped;
   const matched = new Map(); // recipe key -> mails it matched
   running++;
+  const { signal } = stopping; // the toolbar button's Stop; it also aborts requests on their way (classify)
   try {
     // A few mails at a time, all pulling from one list; a break in one ends the list for all.
     // ponytail: fixed 4 in flight (~4 req/s, well under the 1200 req/min limit); 429s back off in askJev
     const messages = iterate(list);
     await Promise.all(Array.from({ length: 4 }, async () => {
       for await (const m of messages) {
-        if (stop) break;
+        if (signal.aborted) break;
         if (s.excludedAccounts.includes(m.folder?.accountId)) {
           excluded++;
           continue;
@@ -50,11 +51,13 @@ async function triageList(list, manual) {
             skipped++;
             continue;
           }
-          const { keys, answers, act, unsure, paid } = await onMessage(m, (id) => classify(id, s));
+          const { keys, answers, act, unsure, paid } = await onMessage(m, (id) => classify(id, s, signal));
+          await allowed(s, signal); // a Stop, or consent unticked, while Jev answered: leave the mail as it was
           await onMessage(m, (id) => applyRecipes(id, s.recipes, keys, answers, s.triagedTag, { act, unsure }));
           judged++, free += !paid, review += unsure;
           for (const k of keys) matched.set(k, (matched.get(k) ?? 0) + 1);
         } catch (e) {
+          if (e.cause === "stop") break; // you stopped it: not an error
           if (e.cause === "halt") {
             halted = e;
             logError("Triage stopped", e);
@@ -68,9 +71,9 @@ async function triageList(list, manual) {
         showBudgetBadge().catch(console.error);
       }
     }));
-    stopped = stop;
+    stopped = signal.aborted;
   } finally {
-    if (!--running) done = 0, stop = false;
+    if (!--running) done = 0, stopping = new AbortController();
     showBudgetBadge().catch(console.error);
   }
   if (manual) return notify(summary(s.recipes, { judged, free, review, matched, skipped, excluded, moved, failed, firstError, halted, stopped }), true);
@@ -160,7 +163,7 @@ messenger.commands.onCommand.addListener(async (command, tab) => {
 
 // While triage runs, the toolbar button counts the mails done so far (the total isn't known up front:
 // big selections arrive in pages), and clicking it stops the run. Otherwise it shows "$" while this month's budget is used up.
-let running = 0, done = 0, stop = false;
+let running = 0, done = 0, stopping = new AbortController();
 async function showBudgetBadge() {
   if (running) {
     await messenger.browserAction.setBadgeText({ text: String(done) });
@@ -174,6 +177,9 @@ async function showBudgetBadge() {
 
 // Keep menus and tag colours current. Tag colours follow the colour set, or Thunderbird's theme on "auto".
 const resyncTags = async () => syncTags(await loadSettings()).catch((e) => logError("Tag sync", e));
+// The popup's requests are counted here too: usage changes on this page only (countUsage).
+messenger.runtime.onMessage.addListener((message) => message?.countUsage && countUsage(...message.countUsage));
+
 messenger.storage.onChanged.addListener((changes) => {
   if (changes.recipes) buildMenus();
   if ("budget" in changes || "usage" in changes) showBudgetBadge().catch(console.error);
@@ -197,6 +203,6 @@ messenger.runtime.onInstalled.addListener(async ({ reason }) => {
 });
 messenger.browserAction.onClicked.addListener(() => {
   if (!running) return messenger.runtime.openOptionsPage();
-  stop = true;
+  stopping.abort(new Error("Stopped", { cause: "stop" }));
   notify(`Stopped triage after ${done} mail(s). The rest has no Triaged tag, so you can pick it up later.`, true);
 });

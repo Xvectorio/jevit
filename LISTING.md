@@ -66,7 +66,7 @@ Triage happens only for new mail if you turned on automatic triage, or for mail 
 
 **What the author receives.** Nothing. JevIt has no analytics, telemetry, tracking or server of its own, and it sends no data to the author or to anyone other than the service you pick (and, with OpenRouter, the model's provider).
 
-**Your control.** Untick the consent box to stop all requests immediately. Remove recipes or examples in the manager, or uninstall JevIt to delete all its stored data. Tags JevIt added to your mail remain until you remove them.
+**Your control.** Untick the consent box to stop all requests immediately, including those already on their way. Remove recipes or examples in the manager, or uninstall JevIt to delete all its stored data. Tags JevIt added to your mail remain until you remove them.
 
 **Contact.** jevit@xvector.io
 
