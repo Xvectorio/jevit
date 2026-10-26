@@ -729,10 +729,17 @@ async function trustedServer(accountId) {
   const cached = authServers[accountId];
   if (cached && Date.now() - cached.at < 7 * 864e5) return cached.id;
   const inbox = (await messenger.folders.query({ accountId, specialUse: ["inbox"] })).map((f) => f.id);
-  const found = inbox.length ? await messenger.messages.query({ folderId: inbox, fromDate: new Date(Date.now() - 90 * 864e5), messagesPerPage: AUTH_SAMPLE }) : [];
+  // A query can't sort and returns the oldest matches first: the last 2 weeks, or 90 days in a quiet Inbox, keeps the
+  // sample recent, so a server that changed its name is picked up within a few weeks.
+  const since = async (days) => {
+    const found = await messenger.messages.query({ folderId: inbox, fromDate: new Date(Date.now() - days * 864e5), messagesPerPage: AUTH_SAMPLE });
+    return (found.messages ?? found).slice(0, AUTH_SAMPLE);
+  };
+  let sample = inbox.length ? await since(14) : [];
+  if (inbox.length && sample.length < AUTH_SAMPLE) sample = await since(90);
   const counts = new Map();
   let sampled = 0;
-  for (const m of (found.messages ?? found).slice(0, AUTH_SAMPLE)) {
+  for (const m of sample) {
     const header = (await messenger.messages.getFull(m.id)).headers["authentication-results"]?.[0];
     const key = header === undefined ? null : authServId(header);
     counts.set(key, (counts.get(key) ?? 0) + 1);
@@ -740,7 +747,10 @@ async function trustedServer(accountId) {
   }
   const [best, n = 0] = [...counts].sort((a, b) => b[1] - a[1])[0] ?? [];
   const id = best != null && n >= 3 && n > sampled / 2 ? best : null;
-  await messenger.storage.local.set({ authServers: { ...authServers, [accountId]: { id, at: Date.now() } } });
+  await serial(async () => { // parallel triage can look up two accounts at once: keep both
+    const { authServers: stored = {} } = await messenger.storage.local.get("authServers");
+    await messenger.storage.local.set({ authServers: { ...stored, [accountId]: { id, at: Date.now() } } });
+  });
   return id;
 }
 
