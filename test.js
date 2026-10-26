@@ -7,6 +7,25 @@ assert.equal(cleanBody("x".repeat(9000)).length, 3000);
 assert.equal(cleanBody("x".repeat(9000), 500).length, 500);
 assert.equal(cleanBody("Deal\u200B\u034F ends: https://t.example.com/c/abc?u=1 (or <https://shop.example/x>)"), "Deal ends: t.example.com (or <shop.example>)");
 
+// Links in the body keep only their host: no user:password@, port, path, query or #fragment, with or without a path.
+assert.equal(cleanBody("https://u:p@host.example?x=1#f"), "host.example");
+assert.equal(cleanBody("https://u:p@host.example/reset?token=s3cret"), "host.example");
+assert.equal(cleanBody("http://host.example:8080/a?b=1"), "host.example", "port dropped, as in link hosts");
+assert.equal(cleanBody("HTTPS://User:Pw@Host.Example#frag"), "host.example");
+assert.equal(cleanBody("Go to https://u:p@host.example/x?t=1. Or (https://a.example?k=2), 'https://b.example#c'!"),
+  "Go to host.example. Or (a.example), 'b.example'!", "sentence punctuation stays");
+assert.equal(cleanBody("https://a@b@host.example/x"), "host.example");
+assert.equal(cleanBody("https://evil.example\\@good.example/x"), "evil.example", "a backslash ends the host, as in browsers");
+assert.equal(cleanBody("https://b\u00FCcher.example/x"), "xn--bcher-kva.example");
+// What the URL parser rejects still loses everything around its host-like part.
+assert.equal(cleanBody("http://u:p@[bad?x=1"), "[bad");
+assert.equal(cleanBody("https://u:p@host.example:99999/x?t=1"), "host.example");
+// mailto: keeps the address, not the prefilled subject or body.
+assert.equal(cleanBody("Write mailto:a@b.example?subject=x&body=token or <MAILTO:c@d.example#x>."), "Write a@b.example or <c@d.example>.");
+
+// A link text that is a URL is cut the same way.
+assert.deepEqual(linkHosts([{ href: "https://evil.example/r", text: "https://u:p@paypal.com/reset?token=1" }]), ["paypal.com \u2192 evil.example"]);
+
 // Link hosts: one per host, text next to where it really goes; no host, no entry; capped.
 assert.deepEqual(linkHosts([
   { href: "https://evil.example/login?id=1", text: " Log in to\n  PayPal " },
@@ -278,6 +297,10 @@ global.messenger = { folders: {
   const big = (await emailState(1, 3000)).email;
   assert.deepEqual([big.from.length, big.subject.length, big.to.length, big.to[0].length, big.cc], [1000, 1000, 20, 1000, []]);
   assert.deepEqual([big.attachments.length, big.attachments[0].length, big.headers["Reply-To"].length, big.links], [10, 200, 1000, []]);
+  assert.equal(big.headers["List-Unsubscribe"], undefined, "no header, none sent");
+  // List-Unsubscribe links carry a personal token: only the hosts and addresses go out.
+  messenger.messages.getFull = async () => ({ headers: { "list-unsubscribe": ["<https://u:p@list.example/unsub?t=s3cret>, <mailto:unsub@list.example?subject=s3cret>"] } });
+  assert.equal((await emailState(1, 3000)).email.headers["List-Unsubscribe"], "<list.example>, <unsub@list.example>");
 
   // A bounce Thunderbird can't list attachments for: names and types come from the MIME tree, attached mail isn't entered.
   messenger.messages.listAttachments = async () => { throw new Error("cannot convert message/delivery-status"); };

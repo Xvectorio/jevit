@@ -184,11 +184,23 @@ const DEFAULTS = {
   recipes: RECIPE_LIBRARY.slice(0, 5),
 };
 
+// Links written out in text, down to where they go: a web link keeps only its host (no user:password@, port, path,
+// query or #fragment), a mailto: link only its address. Punctuation ending the sentence stays.
+// A link the URL parser rejects still loses everything around its host-like part, never kept as written.
+function linksToHosts(text) {
+  return text.replace(/(?:https?:\/\/|mailto:)[^\s>)\]]+/gi, (link) => {
+    const [, url, tail] = link.match(/^(.*?)([.,;:!?'"]*)$/s);
+    if (/^mailto:/i.test(url)) return url.slice(7).split(/[?#]/)[0] + tail;
+    try { return new URL(url).hostname + tail; } catch {}
+    const authority = url.replace(/^[a-z]+:\/\//i, "").split(/[/\\?#]/)[0];
+    return authority.slice(authority.lastIndexOf("@") + 1).split(":")[0] + tail;
+  });
+}
+
 // ponytail: hard cut at `max` characters; add smarter excerpting if long mails misclassify
 function cleanBody(text, max = DEFAULTS.bodyChars) {
-  return text
-    .replace(/[\u00AD\u034F\u200B-\u200D\u2060\uFEFF]/g, "") // invisible preheader padding in marketing mail
-    .replace(/https?:\/\/([^/\s>)\]]+)[^\s>)\]]*/g, "$1") // links: keep the host, drop paths and tracking tokens
+  const visible = text.replace(/[\u00AD\u034F\u200B-\u200D\u2060\uFEFF]/g, ""); // invisible preheader padding in marketing mail
+  return linksToHosts(visible)
     .split("\n")
     .map((l) => l.replace(/[ \t ]+/g, " ").trim())
     .filter((l) => !l.startsWith(">")) // quoted replies are noise for the current mail
@@ -407,6 +419,7 @@ const loadSettings = () => messenger.storage.local.get(DEFAULTS);
 
 // "Log in to PayPal → evil.example": what a link says, next to the host it really goes to. One entry per host, in order.
 // Links without a host (relative, mailto:, javascript:) are left out. Hosts come out in punycode, so look-alikes show.
+// A link text that is itself a URL ("https://paypal.com/reset?token=…") is cut down to its host like the body.
 function linkHosts(anchors) {
   const seen = new Set();
   return anchors.flatMap(({ href, text }) => {
@@ -414,7 +427,7 @@ function linkHosts(anchors) {
     try { host = new URL(href).hostname; } catch {}
     if (!host || seen.has(host)) return [];
     seen.add(host);
-    return [`${text.replace(/\s+/g, " ").trim().slice(0, 80)} → ${host}`.trim()];
+    return [`${linksToHosts(text.replace(/\s+/g, " ").trim()).slice(0, 80)} → ${host}`.trim()];
   }).slice(0, MAX_LINKS);
 }
 
@@ -452,12 +465,14 @@ async function emailState(id, bodyChars) {
   // Everything the sender writes is capped: this ends up in every request, and in examples that ride along in later ones.
   const cut = (text = "") => text.slice(0, HEADER_CHARS);
   const cutList = (list = []) => list.slice(0, MAX_RECIPIENTS).map(cut);
+  // List-Unsubscribe links carry a personal token; that there is one, and its host, is the signal.
+  const unsubscribe = header("list-unsubscribe");
   return {
     me: identity?.email ?? "",
     email: {
       from: cut(m.author), to: cutList(m.recipients), cc: cutList(m.ccList), subject: cut(m.subject), body: cleanBody(body, bodyChars),
       links, attachments,
-      headers: { "Authentication-Results": header("authentication-results"), "List-Unsubscribe": header("list-unsubscribe"), "Reply-To": header("reply-to") },
+      headers: { "Authentication-Results": header("authentication-results"), "List-Unsubscribe": unsubscribe && linksToHosts(unsubscribe), "Reply-To": header("reply-to") },
     },
   };
 }
