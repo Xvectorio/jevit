@@ -16,7 +16,7 @@ JevIt sorts your mail with **recipes**. A recipe is one plain-language yes/no qu
 - Write your own recipes, or create one from selected mail ("more like this").
 - Teach Jev: right-click mail → JevIt → "This is …" / "This is not …". The mail becomes an example the recipe learns from. Shortcuts: Alt+Shift+S (spam) and Alt+Shift+D (not spam).
 - Review Jev's scores for the open email in the header popup, then correct and apply them.
-- Triage selected mail from the context menu, or turn on automatic triage for new mail. Already triaged mail is skipped by default. The toolbar button counts the mails done, and a click stops a long run.
+- Triage selected mail from the context menu, or turn on automatic triage for new mail. Already triaged mail is skipped by default; mail whose triage failed is not. The toolbar button counts the mails done, and a click stops a long run.
 - A Triaged tag on every mail Jev has judged (optional), and tag colours for both light and dark themes.
 - Careful with uncertain mail: star, mark read, junk and move only happen when Jev is at least 90% sure. Below that, and for near misses, mail gets an Unsure tag to review and teach Jev from.
 - Move matches to one folder, or to a folder of the same name in each account (such as each account's own Junk).
@@ -66,7 +66,7 @@ Triage happens only for new mail if you turned on automatic triage, or for mail 
 
 **What the author receives.** Nothing. JevIt has no analytics, telemetry, tracking or server of its own, and it sends no data to the author or to anyone other than the service you pick (and, with OpenRouter, the model's provider).
 
-**Your control.** Untick the consent box to stop all requests immediately. Remove your API key, recipes or examples in the manager, or uninstall JevIt to delete all its stored data. Tags JevIt added to your mail remain until you remove them.
+**Your control.** Untick the consent box to stop all requests immediately, including those already on their way. Remove your API key, recipes or examples in the manager, or uninstall JevIt to delete all its stored data. Tags JevIt added to your mail remain until you remove them.
 
 **Contact.** jevit@xvector.io
 

@@ -59,7 +59,7 @@
         <dd>With “Automatically run recipes on new mail” on, every new email in your inboxes and normal folders is triaged as it arrives.
           Mail that moves away while JevIt works on it, such as to Junk by Thunderbird's junk filter a few seconds after it arrives, is left alone; that isn't an error.</dd>
         <dt>Selected mail</dt>
-        <dd>Select one or more emails, right-click and choose <b>JevIt → Triage with Jev</b>. To triage a whole folder, press Ctrl+A first. Emails are handled four at a time, so large selections still take a while: the JevIt toolbar button counts the emails done, and clicking it stops the run. When it's done, one notification sums up what each recipe matched, how many emails are Unsure, and anything skipped or failed.</dd>
+        <dd>Select one or more emails, right-click and choose <b>JevIt → Triage with Jev</b>. To triage a whole folder, press Ctrl+A first. Emails are handled four at a time, so large selections still take a while: the JevIt toolbar button counts the emails done, and clicking it stops the run, including the emails on their way to Jev at that moment: they're left as they were. When it's done, one notification sums up what each recipe matched, how many emails are Unsure, and anything skipped or failed.</dd>
         <dt>One email, with review</dt>
         <dd>Open an email and click <b>JevIt</b> in the message header. The popup shows Jev's probability for every recipe and ticks the ones that reach their threshold.
           Change the ticks if you disagree and click <b>Apply</b>. With “Remember my corrections as examples” on, every tick you changed becomes a learned example.</dd>
@@ -67,7 +67,8 @@
       <p>Triaging an email again replaces JevIt's tags on it. Your own Thunderbird tags are never touched.
         Moves, stars, read and junk flags are not undone.</p>
       <p><b>Skip already triaged mail</b> (Connection section, on by default): when you triage selected mail, emails Jev already judged (they have the Triaged tag, or stored scores from the last 90 days) are skipped,
-        so triaging a whole folder again doesn't cost anything twice. Untick it to apply your recipes to them again, for example after changing a threshold.</p>
+        so triaging a whole folder again doesn't cost anything twice. Untick it to apply your recipes to them again, for example after changing a threshold.
+        An email whose triage failed isn't skipped, for example when moving it failed or Jev's answer had no scores in it: triaging it again finishes the job, for free if Jev's scores were stored.</p>
       <p><b>Jev's scores are remembered.</b> JevIt stores Jev's score for every email and recipe on your computer, for 90 days. Opening the header popup, or triaging an email again,
         reuses them for free, even when this month's budget is used up. Only a recipe you edited or taught since, or a new recipe, is sent to Jev again, and so is an email whose content changed.
         <b>Forget stored scores</b> (Usage &amp; budget section) deletes them all, so Jev is asked again; mail with the Triaged tag is still skipped unless you untick <b>Skip already triaged mail</b>.</p>
@@ -179,7 +180,7 @@
 
     <section class="card" id="triaged">
       <h2>The Triaged tag</h2>
-      <p>Every email Jev has judged gets a <b>Triaged</b> tag, whether or not any recipe matched. Teaching doesn't add it, and neither does a failed triage.
+      <p>Every email Jev has judged gets a <b>Triaged</b> tag, whether or not any recipe matched. Teaching doesn't add it, and neither does a failed triage: when moving the email fails, the tag comes off again.
         Use Thunderbird's quick filter or a saved search on this tag to see what JevIt has processed, or what it hasn't yet.
         You can change its name and colour in the Connection section. Rename it there, not in Thunderbird's own tag settings: JevIt sets its tags' names, so a rename there is undone. It starts close to Thunderbird's own text colour, so triaged mail looks as before.</p>
       <p>Thunderbird fills a <b>selected</b> row with the colour of its first tag, so a selected triaged email looks different from an untagged one.
@@ -220,6 +221,8 @@
       <p>The <b>monthly budget</b> (default $1, which is roughly 10,000 emails) stops all Jev requests once it's used up, until next month or until you raise it.
         You'll get a notification, and the JevIt toolbar button shows a <b>$</b> badge until there's budget again.
         A triage that is running stops as soon as the budget is used up (also when you lower it below what's spent) or you untick consent.
+        Each request is counted, with an estimate, before it's sent, so emails triaged in parallel can't all start on the last of the budget: at most one request goes past it.
+        Once Jev answers, the estimate is replaced by what Jev reports. A request stopped on its way stays counted with its estimate, as the service may charge it.
         Mail that arrives meanwhile isn't triaged: it has no Triaged tag, so you can find it and choose JevIt → Triage with Jev later. Set it to 0 for no limit. These are estimates: your bill from TypeSafe or OpenRouter is what counts.</p>
     </section>
 
@@ -251,7 +254,7 @@
         <li>Your API keys, recipes with their examples (sender, subject and a short snippet), Jev's scores, settings and usage counters stay in Thunderbird. The known-sender check runs locally.</li>
         <li>They are stored in your Thunderbird profile without encryption: anyone with access to the profile can read them. The manager never shows a saved key.
           Use disk encryption, and an API key with a low spending limit.</li>
-        <li>Untick consent to stop all requests immediately. JevIt is not affiliated with TypeSafe.</li>
+        <li>Untick consent to stop all requests immediately, including those already on their way: their emails are left as they were. JevIt is not affiliated with TypeSafe.</li>
       </ul>
     </section>
 

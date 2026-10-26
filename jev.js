@@ -257,9 +257,16 @@ function reuse(recipes, sigs, stored = {}) {
   return { answers, missing };
 }
 
+// Jev's yes-probability in an answer, or undefined when it isn't a number: Jev's answer is checked, not trusted.
+const noulOf = (answer) => (typeof answer?.noul === "number" ? answer.noul : undefined);
+
+// The answers in Jev's response that hold a score, for the recipes it was asked about. Anything else is left out.
+const scoresIn = (recipes, answers) =>
+  Object.fromEntries(recipes.flatMap((r) => (noulOf(answers?.[r.key]) === undefined ? [] : [[r.key, answers[r.key]]])));
+
 // The scores to store for an email: one per current recipe, so stale ones are dropped.
 const remember = (recipes, sigs, answers) =>
-  Object.fromEntries(recipes.flatMap((r, i) => (typeof answers[r.key]?.noul === "number" ? [[sigs[i], answers[r.key].noul]] : [])));
+  Object.fromEntries(recipes.flatMap((r, i) => (noulOf(answers[r.key]) === undefined ? [] : [[sigs[i], noulOf(answers[r.key])]])));
 
 // Remove stored scores older than SCORE_DAYS. Entries without a time count as old; pruneScores(Infinity) removes all.
 async function pruneScores(now = Date.now()) {
@@ -271,14 +278,14 @@ async function pruneScores(now = Date.now()) {
 // Recipe keys whose yes-probability clears that recipe's threshold. A recipe set to skip known senders
 // never matches mail from someone you know, whatever Jev says.
 function decide(recipes, answers, known = false) {
-  return recipes.filter((r) => answers[r.key]?.noul >= r.threshold && !(known && r.skipKnown)).map((r) => r.key);
+  return recipes.filter((r) => noulOf(answers[r.key]) >= r.threshold && !(known && r.skipKnown)).map((r) => r.key);
 }
 
 // How sure Jev was about the matches. A match under `actSure` only tags: a wrong tag is easy to spot, a wrong move
 // to Junk hides the mail. `unsure`: a match held back like that, or a recipe that scored just under its threshold.
 // Those mails are the ones worth teaching Jev from.
 function certainty(recipes, answers, keys, { actSure = 0, unsureMargin = 0 } = {}) {
-  const p = (r) => answers[r.key]?.noul ?? 0;
+  const p = (r) => noulOf(answers[r.key]) ?? 0;
   const act = recipes.filter((r) => keys.includes(r.key) && (r.action === "tag" || p(r) >= actSure)).map((r) => r.key);
   const unsure = unsureMargin > 0 && recipes.some((r) =>
     keys.includes(r.key) ? !act.includes(r.key) : p(r) < r.threshold && p(r) >= r.threshold - unsureMargin);
@@ -317,7 +324,7 @@ function plan(recipes, keys, answers) {
   const has = (...actions) => hit.some((r) => actions.includes(r.action));
   const move = hit
     .filter((r) => movesMail(r.action) && r.folder)
-    .sort((a, b) => (answers[b.key]?.noul ?? 0) - (answers[a.key]?.noul ?? 0))[0];
+    .sort((a, b) => (noulOf(answers[b.key]) ?? 0) - (noulOf(answers[a.key]) ?? 0))[0];
   return {
     update: { ...(has("read") && { read: true }), ...(has("flag") && { flagged: true }), ...(has("junk", "junkmove") && { junk: true }) },
     folder: move?.folder ?? null,
@@ -383,20 +390,54 @@ function parseBackup(text) {
 let queue = Promise.resolve();
 const serial = (fn) => (queue = queue.then(fn, fn));
 
-async function askJev({ apiKey, model, endpoint }, state, questions) {
+// Unticking consent, or another service or model, also aborts the requests already on their way, not only the next
+// ones: storage.onChanged reaches every JevIt page, so this covers the popup as well as a running triage.
+let halt = new AbortController();
+function haltRequests(changes) {
+  const changed = (key) => key in changes && changes[key].newValue !== changes[key].oldValue;
+  const why = changed("consent") && !changes.consent.newValue ? "Sending mail was stopped: consent was unticked in the JevIt manager."
+    : changed("endpoint") || changed("model") ? "The service or model changed in the JevIt manager. Triage again to use it."
+    : "";
+  if (!why) return;
+  halt.abort(new Error(why, { cause: "halt" }));
+  halt = new AbortController();
+}
+globalThis.messenger?.storage?.onChanged.addListener(haltRequests);
+
+const REQUEST_SECONDS = 60; // per attempt: a request that hangs fails its mail instead of holding up the batch
+
+// A wait that ends early, with the signal's reason, when it aborts.
+const wait = (ms, signal) => new Promise((resolve, reject) => {
+  if (signal?.aborted) return reject(signal.reason);
+  const abort = () => (clearTimeout(timer), reject(signal.reason));
+  const timer = setTimeout(() => (signal?.removeEventListener("abort", abort), resolve()), ms);
+  signal?.addEventListener("abort", abort, { once: true });
+});
+
+// `signal` aborts the request and its waits between retries (triage's Stop, consent unticked).
+// An error with `maybePaid` cut off a request Jev already had (stopped, timed out): it may be charged.
+async function askJev({ apiKey, model, endpoint }, state, questions, signal) {
   for (let attempt = 0; ; attempt++) {
+    signal?.throwIfAborted();
+    const timeout = AbortSignal.timeout(REQUEST_SECONDS * 1000);
+    const cut = (maybePaid) => (e) => {
+      if (!signal?.aborted && !timeout.aborted) throw e;
+      const why = signal?.aborted ? signal.reason : { message: `Jev didn't answer within ${REQUEST_SECONDS} seconds` };
+      throw Object.assign(new Error(why.message, { cause: why.cause }), { maybePaid }); // a copy: parallel mails share the reason
+    };
     const r = await fetch(endpoint || JEV_API, {
       method: "POST",
       redirect: "error", // mail and key go to this endpoint only, never on to where it redirects
       headers: { ...(apiKey && { Authorization: `Bearer ${apiKey}` }), "Content-Type": "application/json" },
       body: JSON.stringify({ model, state, questions }),
-    });
+      signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+    }).catch(cut(true));
     if ((r.status === 429 || r.status === 529) && attempt < 4) {
-      await new Promise((res) => setTimeout(res, 1000 * 2 ** attempt));
+      await wait(1000 * 2 ** attempt, signal);
       continue;
     }
-    if (!r.ok) throw new Error(`Jev ${r.status}: ${await r.text()}`);
-    return r.json(); // { model, answers, usage: { input_tokens, output_tokens } }
+    if (!r.ok) throw new Error(`Jev ${r.status}: ${await r.text().catch(cut(false))}`);
+    return r.json().catch(cut(true)); // { model, answers, usage: { input_tokens, output_tokens } }
   }
 }
 
@@ -408,9 +449,10 @@ const emptyUsage = () => ({ requests: 0, inputTokens: 0, cost: 0 });
 
 // Counters after one more request: this month's (restarting when the month changes) and all-time.
 // OpenRouter reports what a request cost; otherwise it's estimated from the input tokens.
-function addUsage(usage, month, inputTokens, pricePerMtok, reported) {
+// `requests` 0 corrects a request counted before its answer, -1 takes it back; counters don't go below 0.
+function addUsage(usage, month, inputTokens, pricePerMtok, reported, requests = 1) {
   const cost = typeof reported === "number" ? reported : (inputTokens * pricePerMtok) / 1e6;
-  const add = (u) => ({ requests: u.requests + 1, inputTokens: u.inputTokens + inputTokens, cost: u.cost + cost });
+  const add = (u) => ({ requests: Math.max(0, u.requests + requests), inputTokens: Math.max(0, u.inputTokens + inputTokens), cost: Math.max(0, u.cost + cost) });
   const current = usage?.month === month ? usage : emptyUsage();
   return { month, ...add(current), total: add(usage?.total ?? emptyUsage()) };
 }
@@ -424,6 +466,21 @@ function budgetLeft(settings, usage, month) {
 // --- Thunderbird side ---
 
 const loadUsage = async () => (await messenger.storage.local.get({ usage: null })).usage;
+
+// Counts a change to the usage (addUsage's arguments). With `budget`, only while this month's budget isn't used up:
+// returns whether it was counted, so checking and counting are one step and parallel mails can't all slip past.
+// The background page does every count, one at a time: each page has its own serial() queue, so a popup and a triage
+// counting at the same moment could lose one. Other pages (the popup) send theirs there.
+function countUsage(change, budget) {
+  const background = globalThis.messenger?.extension?.getBackgroundPage?.();
+  if (background && background !== globalThis) return messenger.runtime.sendMessage({ countUsage: [change, budget] });
+  return serial(async () => {
+    const usage = await loadUsage(), month = monthOf(), { inputTokens, pricePerMtok, reported, requests } = change;
+    if (budget !== undefined && budgetLeft({ budget }, usage, month) <= 0) return false;
+    await messenger.storage.local.set({ usage: addUsage(usage, month, inputTokens, pricePerMtok, reported, requests) });
+    return true;
+  });
+}
 
 const loadSettings = () => messenger.storage.local.get(DEFAULTS);
 
@@ -488,32 +545,70 @@ async function emailState(id, bodyChars) {
 }
 
 // Has Jev judged this exact email before (stored scores, kept SCORE_DAYS)? Works without the Triaged tag.
+// Not when no score was kept, or when the triage they came from didn't finish (`retry`): triaging it again redoes it.
 async function judgedBefore(id, bodyChars, endpoint) {
   const key = await scoreKey(await emailState(id, bodyChars), endpoint);
-  return !!(await messenger.storage.local.get(key))[key];
+  const stored = (await messenger.storage.local.get(key))[key];
+  return !!stored && !stored.retry && Object.entries(stored).some(([sig, noul]) => sig !== "at" && typeof noul === "number");
 }
 
-async function classify(id, settings) {
-  // Consent, budget and connection are read fresh, so changing them in the manager takes effect mid-batch.
-  // Their errors have cause "halt": the rest of a batch would fail the same way.
+// Marks an email's stored scores (`key` from classify) as from a triage that didn't finish, or as finished again.
+// Marked scores are still reused for free; they only stop "Skip already triaged mail" from skipping the email.
+async function markRetry(key, retry) {
+  const { [key]: stored } = await messenger.storage.local.get(key);
+  if (!stored || !!stored.retry === retry) return;
+  const { retry: _, ...scores } = stored;
+  await messenger.storage.local.set({ [key]: retry ? { ...scores, retry } : scores });
+}
+
+// Consent, budget and connection are read fresh, so changing them in the manager takes effect mid-batch; `signal` is
+// checked with them. Their errors have cause "halt": the rest of a batch would fail the same way. Returns what was read.
+async function allowed(settings, signal) {
+  signal?.throwIfAborted();
   const now = await messenger.storage.local.get({ consent: DEFAULTS.consent, budget: DEFAULTS.budget, endpoint: DEFAULTS.endpoint, model: DEFAULTS.model });
-  const { budget } = now;
+  signal?.throwIfAborted();
   if (!now.consent) throw new Error(`Allow sending mail to ${SERVICES[serviceOf(now.endpoint)].name} first (JevIt manager, top of the page).`, { cause: "halt" });
   // Consent given for another service or model doesn't cover the one this batch started with.
   if (now.endpoint !== settings.endpoint || now.model !== settings.model) {
     throw new Error("The service or model changed in the JevIt manager. Triage again to use it.", { cause: "halt" });
   }
+  return now;
+}
+
+// One request to Jev, counted before it's sent: a guess at its tokens counts while there's budget left, and is corrected
+// to what Jev reports. So parallel mails can't all start on the last cents of a budget; at most one request goes past it.
+// A request that didn't reach Jev, or that Jev refused, is taken back. One cut off on its way may be charged: it stays.
+async function askCounted(settings, budget, state, questions, signal) {
+  const tokens = Math.ceil(JSON.stringify({ state, questions }).length / 4), { pricePerMtok } = settings; // ~4 characters a token
+  if (!(await countUsage({ inputTokens: tokens, pricePerMtok }, budget))) {
+    throw new Error(`Monthly Jev budget of ${money(budget)} reached. Raise it in the JevIt manager, or wait for next month.`, { cause: "halt" });
+  }
+  let response;
+  try {
+    await allowed(settings, signal); // once more, right before the mail leaves
+    response = await askJev(settings, state, questions, signal);
+  } catch (e) {
+    if (!e.maybePaid) await countUsage({ inputTokens: -tokens, pricePerMtok, requests: -1 });
+    throw e;
+  }
+  const { input_tokens = 0, cost } = response?.usage ?? {};
+  const reported = typeof cost === "number" ? cost - (tokens * pricePerMtok) / 1e6 : undefined;
+  await countUsage({ inputTokens: input_tokens - tokens, pricePerMtok, reported, requests: 0 });
+  return response;
+}
+
+// `stopped` is the caller's signal: triage's Stop. It and haltRequests abort a request on its way, and an answer that
+// comes back after either is dropped: no stored scores, and nothing for the caller to tag.
+async function classify(id, settings, stopped) {
+  const signal = stopped ? AbortSignal.any([halt.signal, stopped]) : halt.signal;
+  const { budget } = await allowed(settings, signal);
   const state = await emailState(id, settings.bodyChars).catch(during("Reading the mail"));
   const key = await scoreKey(state, settings.endpoint);
   const [sigs, stored] = await Promise.all([questionSigs(settings.recipes, settings.model), messenger.storage.local.get(key).then((o) => o[key])]);
   const { answers: kept, missing } = reuse(settings.recipes, sigs, stored);
   // Only a request costs money: stored scores are reused even when the budget is used up.
-  const month = monthOf();
-  if (missing.length && budgetLeft({ budget }, await loadUsage(), month) <= 0) {
-    throw new Error(`Monthly Jev budget of ${money(budget)} reached. Raise it in the JevIt manager, or wait for next month.`, { cause: "halt" });
-  }
   const [response, known] = await Promise.all([
-    missing.length ? askJev(settings, state, questionsFor(missing)) : null,
+    missing.length ? askCounted(settings, budget, state, questionsFor(missing), signal) : null,
     // A failing lookup must not fail the triage: the Jev request is already paid for. Treat as unknown.
     // Without a DMARC pass from your own mail server the From address may be faked, so the sender doesn't count as known.
     settings.recipes.some((r) => r.skipKnown) && dmarcPass(state.email.headers["Authentication-Results"], state.email.from)
@@ -522,16 +617,18 @@ async function classify(id, settings) {
         .catch((e) => (console.warn("JevIt: known-sender check failed", e), false))
       : false,
   ]);
-  const answers = { ...kept, ...response?.answers };
-  if (response) {
-    // ponytail: serial() only covers this page; a popup and a background batch finishing at the same moment can drop one count
-    await serial(async () => messenger.storage.local.set({ usage: addUsage(await loadUsage(), month, response.usage?.input_tokens ?? 0, settings.pricePerMtok, response.usage?.cost) }));
-    await messenger.storage.local.set({ [key]: { ...remember(settings.recipes, sigs, answers), at: Date.now() } });
-  }
+  await allowed(settings, signal);
+  // Only answers with a numeric score count. A response without any fails the mail and stores nothing, so triaging it
+  // again asks again (the request stays counted); a partial one keeps the scores it has.
+  const fresh = scoresIn(missing, response?.answers);
+  if (missing.length && !Object.keys(fresh).length) throw new Error("Reading Jev's answer: it has no scores");
+  const answers = { ...kept, ...fresh };
+  // A `retry` mark (markRetry) stays until a triage finishes: the popup asks Jev too, but doesn't move the mail.
+  if (response) await messenger.storage.local.set({ [key]: { ...remember(settings.recipes, sigs, answers), at: Date.now(), ...(stored?.retry && { retry: true }) } });
   const keys = decide(settings.recipes, answers, known);
   // A recipe that can't match this sender can't be unsure about it either.
   const open = settings.recipes.filter((r) => !(known && r.skipKnown));
-  return { state, answers, known, keys, paid: !!response, ...certainty(open, answers, keys, settings) };
+  return { state, key, retry: !!stored?.retry, answers, known, keys, paid: !!response, ...certainty(open, answers, keys, settings) };
 }
 
 // Was this mail's topmost Authentication-Results header written by the account's own mail server? A server that
@@ -583,7 +680,9 @@ async function knownSender(author) {
 }
 
 // Set this extension's tags (leaving the user's other tags alone), then run the actions of the recipes in `act`.
-// `triaged`: Jev judged this mail, so it also gets the Triaged tag (kept on later re-triage or teaching).
+// `triaged`: Jev judged this mail, so it also gets the Triaged tag (kept on later re-triage or teaching). A failed
+// move takes it off again: the triage didn't finish. The folder is found first, so a folder that can't be made
+// fails the mail before anything changes.
 // `unsure` adds the Unsure tag; any other call removes it, because the user has now judged the mail.
 // Tags must exist first: call syncTags(settings) before a batch.
 async function applyRecipes(id, recipes, keys, answers, triaged = false, { act = keys, unsure = false } = {}) {
@@ -591,10 +690,17 @@ async function applyRecipes(id, recipes, keys, answers, triaged = false, { act =
   const ours = new Set([...recipes.map((r) => r.key), UNSURE.key]);
   const m = await messenger.messages.get(id).catch(during("Reading the mail"));
   const { update, folder } = plan(recipes, act, answers);
+  const target = folder && m.folder ? await resolveFolder(folder, m.folder.accountId).catch(during("Finding the folder")) : folder;
   const tags = new Set([...m.tags.filter((t) => !ours.has(t)), ...keys, ...extra.map((t) => t.key)]);
   await messenger.messages.update(id, { ...update, tags: [...tags] }).catch(during("Tagging the mail"));
-  const target = folder && m.folder ? await resolveFolder(folder, m.folder.accountId) : folder;
-  if (target && target !== m.folder?.id) await messenger.messages.move([id], target).catch(during("Moving the mail"));
+  if (!target || target === m.folder?.id) return;
+  await messenger.messages.move([id], target).catch(async (e) => {
+    if (triaged) {
+      tags.delete(TRIAGED.key);
+      await messenger.messages.update(id, { tags: [...tags] }).catch((err) => console.warn("JevIt: removing the Triaged tag failed", err));
+    }
+    during("Moving the mail")(e);
+  });
 }
 
 // The step that failed, in front of the error. Halts keep their own message and cause.
@@ -671,5 +777,5 @@ async function* iterate(list) {
 }
 
 if (typeof module !== "undefined") {
-  module.exports = { onMessage, JEV_API, OPENROUTER_API, localApi, serviceOf, receiver, connectionProblem, storeKey, keySaved, DEFAULTS, RECIPE_LIBRARY, cleanBody, linkHosts, updateRecipes, questionFor, questionsFor, reuse, remember, classify, judgedBefore, pruneScores, decide, certainty, dmarcPass, plan, addExample, draftRecipe, parseBackup, askJev, resolveFolder, applyRecipes, knownSender, emailState, authServId, trustedServer, addUsage, budgetLeft, money, syncTags, colorFor, activeScheme, PALETTE };
+  module.exports = { onMessage, markRetry, scoresIn, JEV_API, OPENROUTER_API, localApi, serviceOf, receiver, connectionProblem, storeKey, keySaved, DEFAULTS, RECIPE_LIBRARY, cleanBody, linkHosts, updateRecipes, questionFor, questionsFor, reuse, remember, classify, judgedBefore, pruneScores, decide, certainty, dmarcPass, plan, addExample, draftRecipe, parseBackup, askJev, haltRequests, countUsage, resolveFolder, applyRecipes, knownSender, emailState, authServId, trustedServer, addUsage, budgetLeft, money, syncTags, colorFor, activeScheme, PALETTE };
 }

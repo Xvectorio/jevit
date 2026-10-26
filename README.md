@@ -16,7 +16,7 @@ Unofficial; not affiliated with TypeSafe.
 - Write your own recipes, or create one from selected mail ("more like this").
 - Teach Jev from your corrections: right-click → JevIt → "This is …" / "This is not …". Shortcuts: Alt+Shift+S (spam), Alt+Shift+D (not spam).
 - See Jev's scores for the open email in the message-header popup, then correct and apply them.
-- Triage selected mail from the context menu, or automatically for new mail. Already triaged mail is skipped by default.
+- Triage selected mail from the context menu, or automatically for new mail. Already triaged mail is skipped by default; mail whose triage failed is not.
 - Progress on the toolbar button while triaging. Click the button to stop a long run. When a manual run is done, one notification sums up what each recipe matched.
 - A Triaged tag on every mail Jev has judged (optional), and tag colours for both light and dark themes.
 - Careful with uncertain mail: star, mark read, junk and move only happen when Jev is at least 90% sure. Below that, and for near misses, mail gets an Unsure tag to review and teach Jev from.
@@ -46,13 +46,15 @@ The state holds the sender, To/Cc, subject, the cleaned body (3000 characters by
 link text next to the host it really points to, attachment names and types, and your own address.
 Every recipe is a TypeSafe **Noul** (a yes/no probability) with yes/no criteria and up to 20 learned examples, all in the same request.
 A recipe matches at its threshold. Star, read, junk and move wait until Jev is at least 90% sure; near misses get the Unsure tag.
-Rate limits (429/529) are retried with exponential backoff.
+Rate limits (429/529) are retried with exponential backoff; a request without an answer in 60 seconds fails that mail, and so does an answer without a numeric score.
+A failed tag or move takes the Triaged tag off and marks the stored scores, so the next triage doesn't skip the mail and reuses them for free.
+Unticking consent, changing the service or model, and Stop abort requests already on their way, and their answers aren't applied.
 
 **Safety and cost.**
 - Every field the sender controls is capped (1000 characters per header, 20 recipients, 10 links, 10 attachments), so a sender can't inflate the request.
 - A sender only counts as known after a DMARC pass for the From domain, in the Authentication-Results header written by your own mail server (learned from recent Inbox mail). The address book and Sent-folder lookup is local.
 - Jev's scores are stored for 90 days, keyed by a SHA-256 of the email and of each question: triaging again and the popup are free, and only edited or taught recipes are asked again.
-- Usage is counted as input tokens × price (or the cost OpenRouter reports) against a monthly budget ($1 by default). Nothing is sent before you opt in, and whole accounts can be excluded.
+- Usage is counted as input tokens × price (or the cost OpenRouter reports) against a monthly budget ($1 by default). Each request is counted with an estimate before it's sent, by the background page only, so parallel triage passes the budget by one request at most. Nothing is sent before you opt in, and whole accounts can be excluded.
 - The services are a fixed list, so the manifest names every host mail can reach. Consent belongs to who receives the mail: a new service, or an OpenRouter model from another provider, unticks it. Each service has its own key and stored scores.
 
 Everything (API key, recipes, examples, usage, scores) stays in Thunderbird's `storage.local`. There is no server, telemetry or analytics.

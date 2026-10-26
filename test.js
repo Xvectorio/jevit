@@ -1,6 +1,7 @@
 // node test.js  (set TYPESAFE_API_KEY or OPENROUTER_API_KEY to also run the default recipes against Jev there)
 const assert = require("node:assert");
-const { onMessage, JEV_API, OPENROUTER_API, localApi, serviceOf, receiver, connectionProblem, storeKey, keySaved, DEFAULTS, RECIPE_LIBRARY, cleanBody, linkHosts, updateRecipes, questionFor, questionsFor, reuse, remember, classify, judgedBefore, pruneScores, decide, certainty, dmarcPass, plan, addExample, draftRecipe, parseBackup, askJev, resolveFolder, applyRecipes, knownSender, emailState, authServId, trustedServer, addUsage, budgetLeft, money, syncTags, colorFor, activeScheme, PALETTE } = require("./jev.js");
+const fs = require("node:fs"), vm = require("node:vm");
+const { onMessage, markRetry, scoresIn, JEV_API, OPENROUTER_API, localApi, serviceOf, receiver, connectionProblem, storeKey, keySaved, DEFAULTS, RECIPE_LIBRARY, cleanBody, linkHosts, updateRecipes, questionFor, questionsFor, reuse, remember, classify, judgedBefore, pruneScores, decide, certainty, dmarcPass, plan, addExample, draftRecipe, parseBackup, askJev, haltRequests, countUsage, resolveFolder, applyRecipes, knownSender, emailState, authServId, trustedServer, addUsage, budgetLeft, money, syncTags, colorFor, activeScheme, PALETTE } = require("./jev.js");
 
 assert.equal(cleanBody("Hi\n> old quote\n\n\n\n  Bye  "), "Hi\n\nBye");
 assert.equal(cleanBody("x".repeat(9000)).length, 3000);
@@ -413,6 +414,204 @@ global.messenger = { folders: {
   messenger.storage.local.get = async (k) => Object.fromEntries(Object.entries(k).map(([key, d]) => [key, local[key] ?? d]));
   await assert.rejects(classify(1, s2), (e) => e.cause === "halt" && !/Reading/.test(e.message), "a halt keeps its message and cause");
   local.consent = true;
+
+  // Requests on their way: unticking consent and Stop abort them, the answer isn't kept, and the budget holds in parallel.
+  const kept = { consent: true, budget: 1 };
+  global.messenger = {
+    storage: { local: {
+      get: async (k) => (typeof k === "string" ? { [k]: kept[k] } : Object.fromEntries(Object.entries(k).map(([key, d]) => [key, kept[key] ?? d]))),
+      set: async (o) => Object.assign(kept, o),
+    } },
+    messages: {
+      get: async (id) => ({ author: "x@spam.biz", subject: `Mail ${id}`, recipients: [], ccList: [] }),
+      listInlineTextParts: async () => [{ contentType: "text/plain", content: "Hi" }],
+      listAttachments: async () => [],
+      getFull: async () => ({ headers: {} }),
+    },
+  };
+  const scores = () => Object.keys(kept).filter((k) => k.startsWith("score:"));
+  const until = async (ok) => { for (let i = 0; !ok(); i++) await (i < 1000 ? new Promise(setImmediate) : assert.fail("timed out")); };
+  // Jev answers when told to (`answer`), or the request is aborted like a real fetch; `deaf` ignores the abort.
+  let sent = [], answer, deaf = false, status = 200;
+  global.fetch = (url, { body: req, signal }) => {
+    assert.ok(signal instanceof AbortSignal, "every request can be aborted, and times out");
+    const { questions } = JSON.parse(req);
+    sent.push(Object.keys(questions));
+    return new Promise((resolve, reject) => {
+      answer = () => resolve({ ok: status === 200, status, text: async () => "busy", json: async () => ({ answers: Object.fromEntries(Object.keys(questions).map((k) => [k, { noul: 0.95 }])), usage: { input_tokens: 1000 } }) });
+      if (!deaf) signal.addEventListener("abort", () => reject(signal.reason));
+    });
+  };
+  const s3 = { ...DEFAULTS, apiKey: "k", recipes: structuredClone(rs.slice(0, 2)) };
+  let pending = classify(11, s3);
+  await until(() => sent.length === 1);
+  kept.consent = false;
+  haltRequests({ consent: { oldValue: true, newValue: false } }); // as storage.onChanged reports it
+  await assert.rejects(pending, (e) => e.cause === "halt" && /consent was unticked/.test(e.message), "consent unticked mid-request aborts it");
+  assert.deepEqual([scores(), kept.usage.requests], [[], 1], "no scores kept; it reached Jev, so its estimate stays counted");
+  await assert.rejects(classify(12, s3), /Allow sending/);
+  assert.equal(sent.length, 1, "and nothing more is sent");
+  kept.consent = true;
+  haltRequests({ consent: { oldValue: false, newValue: true }, model: { oldValue: "jev-latest", newValue: "jev-latest" } }); // re-ticked, same model: nothing to stop
+  pending = classify(13, s3);
+  await until(() => sent.length === 2);
+  answer();
+  assert.deepEqual((await pending).keys, ["jev_spam", "jev_reply"]);
+  assert.deepEqual([kept.usage.requests, scores().length], [2, 1]);
+  assert.ok(kept.usage.inputTokens > 1000, "the answered request counts what Jev reported, the cut-off one its estimate");
+  const counted = { ...kept.usage };
+
+  // Stop: the request on its way is aborted; an answer that comes anyway (`deaf`) is paid for but not kept.
+  let stop = new AbortController();
+  pending = classify(14, s3, stop.signal);
+  await until(() => sent.length === 3);
+  stop.abort(new Error("Stopped", { cause: "stop" }));
+  await assert.rejects(pending, (e) => e.cause === "stop", "Stop aborts the request on its way");
+  deaf = true, stop = new AbortController();
+  pending = classify(15, s3, stop.signal);
+  await until(() => sent.length === 4);
+  stop.abort(new Error("Stopped", { cause: "stop" }));
+  answer();
+  await assert.rejects(pending, (e) => e.cause === "stop", "an answer after Stop isn't used");
+  assert.equal(scores().length, 1, "and isn't stored");
+  assert.deepEqual([kept.usage.requests, kept.usage.inputTokens - counted.inputTokens > 1000], [counted.requests + 2, true], "both counted");
+  await assert.rejects(classify(16, s3, stop.signal), (e) => e.cause === "stop");
+  assert.equal(sent.length, 4, "nothing is sent after Stop");
+  deaf = false;
+
+  // A request Jev turns away, or that waits out a rate limit when consent goes, isn't counted.
+  const before = kept.usage.requests;
+  status = 500;
+  pending = classify(17, s3);
+  await until(() => sent.length === 5);
+  answer();
+  await assert.rejects(pending, /Jev 500: busy/);
+  status = 429;
+  pending = classify(18, s3);
+  await until(() => sent.length === 6);
+  answer();
+  await new Promise(setImmediate);
+  haltRequests({ consent: { oldValue: true, newValue: false } });
+  await assert.rejects(pending, (e) => e.cause === "halt", "the wait before a retry ends too");
+  assert.deepEqual([kept.usage.requests, sent.length], [before, 6], "neither counted; no retry sent");
+  status = 200;
+
+  // The last of the budget: parallel mails count before they send, so only one starts.
+  kept.usage = { ...kept.usage, cost: 1 - 1e-9 };
+  const racing = Promise.allSettled([20, 21, 22, 23, 24, 25, 26, 27].map((id) => classify(id, s3)));
+  await until(() => sent.length === 7);
+  await new Promise(setImmediate);
+  answer();
+  const raced = await racing;
+  assert.deepEqual([raced.filter((r) => r.status === "fulfilled").length, sent.length], [1, 7], "one request, not eight");
+  assert.ok(raced.filter((r) => r.status === "rejected").every((r) => r.reason.cause === "halt" && /budget/.test(r.reason.message)));
+  assert.equal(kept.usage.requests, before + 1);
+
+  // The popup counts on the background page, so the two can't lose each other's counts.
+  const messages = [];
+  messenger.extension = { getBackgroundPage: () => ({}) };
+  messenger.runtime = { sendMessage: async (m) => (messages.push(m), true) };
+  assert.equal(await countUsage({ inputTokens: 5, pricePerMtok: 1 }, 2), true);
+  assert.deepEqual([messages, kept.usage.requests], [[{ countUsage: [{ inputTokens: 5, pricePerMtok: 1 }, 2] }], before + 1]);
+  messenger.extension.getBackgroundPage = () => globalThis; // on the background page itself: counted there
+  assert.equal(await countUsage({ inputTokens: 5, pricePerMtok: 1 }), true);
+  assert.deepEqual([messages.length, kept.usage.requests], [1, before + 2]);
+  const none = { requests: 0, inputTokens: 0, cost: 0 };
+  assert.deepEqual(addUsage({ month: "m", ...none, requests: 1, total: none }, "m", -20, 0, -1, -1), { month: "m", ...none, total: none }, "never below 0");
+
+  // Jev's answer is checked: a score is a number. A partial answer keeps what it has; one without scores stores nothing.
+  const shaky = { consent: true, budget: 1 };
+  let reply;
+  global.fetch = async (url, { body: req }) => ({ ok: true, json: async () => reply(Object.keys(JSON.parse(req).questions)) });
+  global.messenger = {
+    storage: { local: {
+      get: async (k) => (typeof k === "string" ? { [k]: shaky[k] } : Object.fromEntries(Object.entries(k).map(([key, d]) => [key, shaky[key] ?? d]))),
+      set: async (o) => Object.assign(shaky, o),
+    } },
+    messages: {
+      get: async (id) => ({ author: "x@spam.biz", subject: `Mail ${id}`, recipients: [], ccList: [] }),
+      listInlineTextParts: async () => [{ contentType: "text/plain", content: "Hi" }],
+      listAttachments: async () => [],
+      getFull: async () => ({ headers: {} }),
+    },
+  };
+  const stored = () => Object.entries(shaky).filter(([k]) => k.startsWith("score:")).map(([, v]) => v);
+  const s4 = { ...DEFAULTS, apiKey: "k", recipes: structuredClone(rs.slice(0, 2)) };
+  for (const response of [null, {}, { answers: "yes" }, { answers: [0.9] }, { answers: { jev_spam: { noul: "0.9" }, jev_reply: {} } }]) {
+    reply = () => response;
+    await assert.rejects(classify(31, s4), /^Error: Reading Jev's answer: it has no scores$/, `no scores in ${JSON.stringify(response)}`);
+  }
+  assert.deepEqual([stored(), shaky.usage.requests], [[], 5], "nothing stored; the requests were answered, so they stay counted");
+  reply = () => ({ answers: { jev_spam: { noul: 0.9 }, jev_reply: { noul: "0.95" } } });
+  const partial = await classify(31, s4);
+  assert.deepEqual([partial.answers, partial.keys, Object.keys(stored()[0]).length], [{ jev_spam: { noul: 0.9 } }, ["jev_spam"], 2], "only Spam's score kept (and the time)");
+  reply = (asked) => (assert.deepEqual(asked, ["jev_reply"], "only the recipe without a score is asked again"), { answers: { jev_reply: { noul: 0.1 } } });
+  assert.deepEqual((await classify(31, s4)).answers, { jev_spam: { noul: 0.9 }, jev_reply: { noul: 0.1 } });
+  // judgedBefore: an entry without scores, or from a triage that didn't finish, doesn't count; its scores are still reused.
+  assert.equal(await judgedBefore(31, s4.bodyChars), true);
+  await markRetry(partial.key, true);
+  assert.deepEqual([await judgedBefore(31, s4.bodyChars), (await classify(31, s4)).retry], [false, true], "marked: not judged, still reused");
+  await markRetry(partial.key, false);
+  assert.deepEqual([await judgedBefore(31, s4.bodyChars), "retry" in shaky[partial.key]], [true, false]);
+  shaky[partial.key] = { at: Date.now() };
+  assert.equal(await judgedBefore(31, s4.bodyChars), false, "an empty entry is not judged");
+  // A numeric string is no score, for deciding as for storing.
+  assert.deepEqual([decide(rs, { jev_spam: { noul: "0.9" } }), remember(rs, ["a"], { jev_spam: { noul: "0.9" } })], [[], {}]);
+  assert.deepEqual(scoresIn(rs.slice(0, 2), { jev_spam: { noul: 0 }, jev_reply: { noul: null }, jev_x: { noul: 1 } }), { jev_spam: { noul: 0 } });
+
+  // Triage, run as on Thunderbird's background page: jev.js and background.js in one scope, around a fake Thunderbird.
+  // A move that fails takes the Triaged tag off again and marks the scores, so the next triage (skip on) redoes it for free.
+  const page = { consent: true, apiKey: "k", recipes: [{ ...rs[2], action: "move", folder: "a:/News" }] };
+  const header = { id: 41, headerMessageId: "n@x", tags: [], folder: { id: "a:/INBOX", accountId: "a" }, author: "news@shop.example", subject: "Deals", recipients: [], ccList: [] };
+  const done = { requests: 0, moves: 0, notes: [] };
+  let moveFails = true, answerWith = { noul: 0.95 };
+  // Errors go to Recent errors (page.errors), checked there. Any API the test doesn't care about (menus, badges, listeners) is a no-op that resolves to undefined.
+  const anything = () => new Proxy(async () => {}, { get: (t, k) => (k === "then" ? undefined : anything()) });
+  const fake = (o) => new Proxy(o, { get: (t, k) => (k in t ? (t[k]?.constructor === Object ? fake(t[k]) : t[k]) : anything()) });
+  const ctx = vm.createContext({
+    console: { ...console, error() {} }, crypto, TextEncoder, AbortController, AbortSignal, setTimeout, clearTimeout, matchMedia: () => ({ matches: true, addEventListener() {} }),
+    fetch: async (url, { body: req }) => (done.requests++, { ok: true, json: async () => ({ answers: { jev_newsletter: answerWith }, usage: { input_tokens: 100 } }) }),
+    messenger: fake({
+      extension: { getBackgroundPage: () => undefined },
+      notifications: { create: async (id, { message }) => done.notes.push(message) },
+      storage: { local: {
+        get: async (k) => (k === null ? { ...page } : typeof k === "string" ? { [k]: page[k] } : Object.fromEntries(Object.entries(k).map(([key, d]) => [key, page[key] ?? d]))),
+        set: async (o) => Object.assign(page, structuredClone(o)),
+        remove: async (keys) => [keys].flat().forEach((k) => delete page[k]),
+      } },
+      identities: { getDefault: async () => ({ email: "me@example.com" }) },
+      messages: {
+        tags: { list: async () => [] },
+        get: async () => structuredClone(header),
+        update: async (id, { tags }) => (header.tags = tags),
+        move: async () => (done.moves++, moveFails ? Promise.reject(new Error("Folder is offline")) : (header.folder = { id: "a:/News", accountId: "a" })),
+        listInlineTextParts: async () => [{ contentType: "text/plain", content: "Big deals this week" }],
+        listAttachments: async () => [],
+        getFull: async () => ({ headers: {} }),
+      },
+    }),
+  });
+  for (const file of ["jev.js", "background.js"]) vm.runInContext(fs.readFileSync(`${__dirname}/${file}`, "utf8"), ctx, { filename: file });
+  const triage = async () => (await ctx.triageList({ messages: [structuredClone(header)] }, true), await vm.runInContext("shown", ctx), done.notes.at(-1));
+  const pageScores = () => Object.entries(page).filter(([k]) => k.startsWith("score:")).map(([, v]) => v);
+  assert.match(await triage(), /1 failed: Moving the mail: Folder is offline/);
+  assert.deepEqual(page.errors.map((e) => [e.what, e.message]), [["Deals", "Moving the mail: Folder is offline"]]);
+  assert.deepEqual([header.tags, done.requests, pageScores().map((v) => v.retry)], [["jev_newsletter"], 1, [true]], "tagged, no Triaged tag, scores kept but marked");
+  moveFails = false;
+  assert.match(await triage(), /^Triaged 1 mail\(s\): Newsletter 1\. 1 from stored scores \(free\)\.$/, "not skipped: tried again");
+  assert.deepEqual([header.folder.id, header.tags, done.requests, done.moves, pageScores().map((v) => v.retry)], ["a:/News", ["jev_newsletter", "jev_triaged"], 1, 2, [undefined]], "moved this time; mark cleared");
+  header.tags = []; // the tag can be off: stored scores alone mark it as done
+  assert.match(await triage(), /Skipped 1 already triaged/);
+  assert.equal(done.moves, 2);
+  // A response without scores fails the mail, stores nothing, and the next triage asks Jev again.
+  await vm.runInContext("pruneScores(Infinity)", ctx);
+  Object.assign(header, { folder: { id: "a:/INBOX", accountId: "a" }, tags: [] });
+  answerWith = { noul: "0.95" };
+  assert.match(await triage(), /1 failed: Reading Jev's answer: it has no scores/);
+  assert.deepEqual([pageScores(), header.tags, done.requests], [[], [], 2]);
+  answerWith = { noul: 0.95 };
+  assert.match(await triage(), /^Triaged 1 mail\(s\): Newsletter 1\.$/, "asked again, not skipped");
+  assert.deepEqual([done.requests, done.moves], [3, 3]);
 
   assert.deepEqual(reuse(rs.slice(0, 2), ["a", "b"], { b: 0.4, c: 1 }), { answers: { jev_reply: { noul: 0.4 } }, missing: [rs[0]] });
   assert.deepEqual(remember(rs.slice(0, 2), ["a", "b"], { jev_spam: { noul: 0.9 } }), { a: 0.9 }, "only recipes with an answer");
