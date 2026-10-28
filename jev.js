@@ -199,7 +199,10 @@ const DEFAULTS = {
 // A link the URL parser rejects still loses everything around its host-like part, never kept as written.
 function linksToHosts(text) {
   return text.replace(/(?:https?:\/\/|mailto:)[^\s>)\]]+/gi, (link) => {
-    const [, url, tail] = link.match(/^(.*?)([.,;:!?'"]*)$/s);
+    // A loop, not a regex: splitting the trailing punctuation off with one backtracks quadratically on a long run of it.
+    let end = link.length;
+    while (`.,;:!?'"`.includes(link[end - 1])) end--;
+    const url = link.slice(0, end), tail = link.slice(end);
     if (/^mailto:/i.test(url)) return url.slice(7).split(/[?#]/)[0] + tail;
     try { return new URL(url).hostname + tail; } catch {}
     const authority = url.replace(/^[a-z]+:\/\//i, "").split(/[/\\?#]/)[0];
@@ -210,14 +213,16 @@ function linksToHosts(text) {
 // ponytail: hard cut at `max` characters; add smarter excerpting if long mails misclassify
 function cleanBody(text, max = DEFAULTS.bodyChars) {
   const visible = text.replace(/[\u00AD\u034F\u200B-\u200D\u2060\uFEFF]/g, ""); // invisible preheader padding in marketing mail
-  return linksToHosts(visible)
+  const kept = visible
     .split("\n")
     .map((l) => l.replace(/[ \t ]+/g, " ").trim())
     .filter((l) => !l.startsWith(">")) // quoted replies are noise for the current mail
     .join("\n")
     .replace(/\n{3,}/g, "\n\n")
-    .trim()
-    .slice(0, max);
+    .trim();
+  // A mail can be megabytes: links are cut down only in what can still end up within `max`, ten times as much to leave
+  // room for the characters long tracking links give back.
+  return linksToHosts(kept.slice(0, 10 * max)).slice(0, max);
 }
 
 function questionFor(r) {
@@ -559,7 +564,7 @@ function linkHosts(anchors) {
     try { host = new URL(href).hostname; } catch {}
     if (!host || seen.has(host)) return [];
     seen.add(host);
-    return [`${linksToHosts(text.replace(/\s+/g, " ").trim()).slice(0, 80)} → ${host}`.trim()];
+    return [`${linksToHosts(text.slice(0, HEADER_CHARS).replace(/\s+/g, " ").trim()).slice(0, 80)} → ${host}`.trim()];
   }).slice(0, MAX_LINKS);
 }
 
