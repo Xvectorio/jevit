@@ -24,6 +24,16 @@ assert.equal(cleanBody("https://u:p@host.example:99999/x?t=1"), "host.example");
 // mailto: keeps the address, not the prefilled subject or body.
 assert.equal(cleanBody("Write mailto:a@b.example?subject=x&body=token or <MAILTO:c@d.example#x>."), "Write a@b.example or <c@d.example>.");
 
+// A long run of punctuation in a link can't hang the extension: before, this took hours (quadratic backtracking).
+{
+  const dots = "http://h.example" + ".".repeat(5e6);
+  const started = Date.now();
+  assert.equal(cleanBody(dots + "x"), "h.example" + ".".repeat(2991));
+  assert.equal(cleanBody(dots + "x", 1e7).length, 5e6 + 10, "linear even without the cut");
+  assert.equal(linkHosts([{ href: "https://evil.example", text: dots + "x" }])[0], `h.example${".".repeat(71)} → evil.example`);
+  assert.ok(Date.now() - started < 1000, `long punctuation took ${Date.now() - started} ms`);
+}
+
 // A link text that is a URL is cut the same way.
 assert.deepEqual(linkHosts([{ href: "https://evil.example/r", text: "https://u:p@paypal.com/reset?token=1" }]), ["paypal.com \u2192 evil.example"]);
 
