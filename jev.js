@@ -455,7 +455,8 @@ async function askJev({ apiKey, model, endpoint }, state, questions, signal) {
       method: "POST",
       redirect: "error", // mail and key go to this endpoint only, never on to where it redirects
       headers: { ...(apiKey && { Authorization: `Bearer ${apiKey}` }), "Content-Type": "application/json" },
-      body: JSON.stringify({ model, state, questions }),
+      // A cut can split an emoji, and Jev rejects the lone half ("invalid Unicode text"): it goes as U+FFFD instead.
+      body: JSON.stringify({ model, state, questions }, (k, v) => (typeof v === "string" ? v.toWellFormed() : v)),
       signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
     }).catch(cut(true));
     if ((r.status === 429 || r.status === 529) && attempt < 4) {
