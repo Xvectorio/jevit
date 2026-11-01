@@ -410,6 +410,15 @@ global.messenger = { folders: {
   assert.deepEqual((await emailState(1, 3000)).email.links, ["Log in → evil.example"]);
   delete global.DOMParser;
 
+  // A cut through an emoji leaves half of it; that half goes to Jev as U+FFFD, never as a lone surrogate.
+  global.fetch = async (url, { body: req }) => {
+    assert.ok(!/\\ud[89a-f]/i.test(req), req);
+    assert.equal(JSON.parse(req).state.email.body, "x".repeat(2999) + "�");
+    return { ok: true, json: async () => ({ answers: {} }) };
+  };
+  assert.equal(cleanBody("x".repeat(2999) + "\u{1F680}").at(-1), "\uD83D", "the cut splits the emoji");
+  await askJev({ apiKey: "k" }, { email: { body: cleanBody("x".repeat(2999) + "\u{1F680}") } }, {});
+
   // Stored scores: asking again is free; only recipes whose question changed (edited, taught) go to Jev again.
   const local = { consent: true, budget: 1 };
   let body = "Claim your prize", asked = [], urls = [];
