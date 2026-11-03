@@ -569,12 +569,12 @@ function linkHosts(anchors) {
   }).slice(0, MAX_LINKS);
 }
 
-// Whether an inline style hides its element: display:none, visibility:hidden, opacity or font-size 0, or a height
+// Whether an inline style hides its whole subtree: display:none, visibility:hidden, opacity 0, or a height
 // of 0 with overflow hidden. "!important", spacing and case don't matter.
 function hiddenStyle(style = "") {
   const css = Object.fromEntries(style.split(";").map((d) => d.split(":").map((s) => s.replace(/!\s*important/i, "").trim().toLowerCase())));
   const zero = (v) => parseFloat(v) === 0;
-  return css.display === "none" || css.visibility === "hidden" || zero(css.opacity) || zero(css["font-size"]) ||
+  return css.display === "none" || css.visibility === "hidden" || zero(css.opacity) ||
     ((zero(css.height) || zero(css["max-height"])) && css.overflow === "hidden");
 }
 
@@ -582,6 +582,24 @@ function hiddenStyle(style = "") {
 // score. A guess from inline styles and the hidden attribute only: DOMParser lays nothing out, and <style> rules aren't read.
 function stripHidden(doc) {
   doc.querySelectorAll("[hidden], [style]").forEach((e) => (e.hasAttribute("hidden") || hiddenStyle(e.getAttribute("style"))) && e.remove());
+  // Email layout tables often set font-size:0 to eliminate whitespace, then restore
+  // a readable size inside cells. Zero font size hides text, not the whole subtree.
+  // Walk inherited inline sizes, retaining descendants that restore a visible size.
+  const visit = (element, inheritedZero = false) => {
+    const style = element.getAttribute("style") ?? "";
+    const size = element.style?.fontSize || style.match(/(?:^|;)\s*font-size\s*:\s*([^;]+)/i)?.[1].replace(/!\s*important/i, "").trim().toLowerCase();
+    const relative = /^(?:[\d.]+(?:em|ex|ch|%)|smaller|larger)$/.test(size ?? "");
+    const zero = !size || /^(inherit|unset)$/.test(size) ? inheritedZero
+      : parseFloat(size) === 0 || (inheritedZero && relative);
+    for (const child of [...element.childNodes]) {
+      if (child.nodeType === 3 && zero) child.remove();
+      else if (child.nodeType === 1) visit(child, zero);
+    }
+    // Remove empty invisible links as well, so they cannot displace real links.
+    // Images and other non-text elements remain visible even with a zero font size.
+    if (element !== doc.body && zero && !element.childNodes.length && !/^(IMG|SVG|VIDEO|CANVAS|INPUT|BR|HR)$/.test(element.tagName)) element.remove();
+  };
+  if (doc.body) visit(doc.body);
 }
 
 // Text of an HTML body: without CSS and scripts, which textContent would otherwise keep, and with a line break after
@@ -589,7 +607,7 @@ function stripHidden(doc) {
 function htmlText(doc) {
   doc.querySelectorAll("style, script, noscript, template").forEach((e) => e.remove());
   doc.querySelectorAll("br, p, div, li, tr, td, th, h1, h2, h3, h4, h5, h6, blockquote, table").forEach((e) => e.after("\n"));
-  return doc.body.textContent;
+  return doc.body?.textContent ?? "";
 }
 
 // Attachments in getFull()'s MIME tree, for when listAttachments() fails. Attachments have a name (maybe empty).

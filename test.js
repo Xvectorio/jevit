@@ -362,23 +362,25 @@ global.messenger = { folders: {
   await assert.rejects(emailState(1, 3000), /delivery-status/, "no MIME tree: the original error");
 
   // Hidden text and links: what inline styles or the hidden attribute hide isn't sent, the rest is.
-  for (const style of ["display:none", "DISPLAY: None !important", "visibility:hidden", "opacity:0", "opacity: 0.0", "font-size:0px",
+  for (const style of ["display:none", "DISPLAY: None !important", "visibility:hidden", "opacity:0", "opacity: 0.0",
     "max-height:0; overflow:hidden", "height: 0 !important; overflow: hidden !important", "color:red; display:none; mso-hide:all"])
     assert.equal(hiddenStyle(style), true, style);
-  for (const style of [undefined, "", "display:block", "opacity:0.5", "font-size:10px", "max-height:0", "height:0; overflow:visible", "background:url(x;y)", "border:0"])
+  for (const style of [undefined, "", "font-size:0px", "display:block", "opacity:0.5", "font-size:10px", "max-height:0", "height:0; overflow:visible", "background:url(x;y)", "border:0"])
     assert.equal(hiddenStyle(style), false, String(style));
   // DOMParser in miniature: elements with attributes and children, and the selectors JevIt uses ("a[href]", "[hidden], [style]", "style, script").
   const el = (tag, attrs = {}, ...kids) => {
-    const e = { tag, attrs, kids, parent: null };
-    kids.forEach((k) => typeof k === "object" && (k.parent = e));
+    const text = (value) => ({ nodeType: 3, textContent: value, parent: null, remove() { this.parent.kids = this.parent.kids.filter((k) => k !== this); } });
+    const e = { tag, tagName: tag.toUpperCase(), nodeType: 1, attrs, kids: kids.map((k) => typeof k === "string" ? text(k) : k), parent: null };
+    Object.defineProperty(e, "childNodes", { get: () => e.kids });
+    e.kids.forEach((k) => (k.parent = e));
     e.getAttribute = (a) => attrs[a] ?? null;
     e.hasAttribute = (a) => Object.hasOwn(attrs, a);
     e.remove = () => e.parent && (e.parent.kids = e.parent.kids.filter((k) => k !== e));
-    e.after = (text) => e.parent && e.parent.kids.splice(e.parent.kids.indexOf(e) + 1, 0, text);
+    e.after = (value) => { if (e.parent) { const t = text(value); t.parent = e.parent; e.parent.kids.splice(e.parent.kids.indexOf(e) + 1, 0, t); } };
     Object.defineProperty(e, "textContent", { get: () => e.kids.map((k) => (typeof k === "string" ? k : k.textContent)).join("") });
     return e;
   };
-  const all = (e) => e.kids.flatMap((k) => (typeof k === "string" ? [] : [k, ...all(k)]));
+  const all = (e) => e.kids.flatMap((k) => (k.nodeType !== 1 ? [] : [k, ...all(k)]));
   const matches = (e, sel) => sel.split(",").some((s) => {
     const [, tag, attr] = s.trim().match(/^(\w*)(?:\[(\w+)\])?$/);
     return (!tag || e.tag === tag) && (!attr || e.hasAttribute(attr));
@@ -408,6 +410,29 @@ global.messenger = { folders: {
   html = () => dom(el("body", {}, el("div", { style: "display:none" }, ...Array.from({ length: 10 }, (_, i) => el("a", { href: `https://brand${i}.example` }, "x"))),
     el("a", { href: "https://evil.example" }, "Log in")));
   assert.deepEqual((await emailState(1, 3000)).email.links, ["Log in → evil.example"]);
+  // MJML-style layout: zero-size containers do not hide explicitly resized children.
+  html = () => dom(el("body", {}, el("table", { style: "font-size:0" },
+    "Invisible layout text", el("a", { href: "https://hidden.example" }, "Hidden link"),
+    el("td", { style: "font-size: 0px" }, el("div", { style: "font-size:16px" },
+      "Verification code: 123456 ", el("a", { href: "https://account.example/reset" }, "Reset password"))),
+    el("span", { style: "font-size:120%" }, "Still zero"),
+    el("span", { style: "font-size:1rem" }, "Visible again"))));
+  const restored = (await emailState(1, 3000)).email;
+  assert.match(restored.body, /Verification code: 123456/);
+  assert.match(restored.body, /Reset password/);
+  assert.match(restored.body, /Visible again/);
+  assert.ok(!/Invisible|Hidden link|Still zero/.test(restored.body));
+  assert.deepEqual(restored.links, ["Reset password → account.example"]);
+  // Zero-size text does not hide a linked image; inherited zero text stays hidden.
+  html = () => dom(el("body", { style: "font-size:0 !important" },
+    el("span", { style: "font-size:inherit" }, "Invisible"),
+    el("a", { href: "https://image.example" }, el("img", { src: "https://image.example/picture.png" })),
+    el("div", { style: "font-size:14px" }, "Visible content")));
+  const imageMail = (await emailState(1, 3000)).email;
+  assert.equal(imageMail.body, "Visible content");
+  assert.deepEqual(imageMail.links, ["→ image.example"]);
+  html = () => ({ body: null, querySelectorAll: () => [] });
+  assert.equal((await emailState(1, 3000)).email.body, "", "a removed/absent body is empty, not an extraction error");
   delete global.DOMParser;
 
   // A cut through an emoji leaves half of it; that half goes to Jev as U+FFFD, never as a lone surrogate.
