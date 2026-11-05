@@ -16,7 +16,7 @@ Unofficial; not affiliated with TypeSafe.
 - Write your own recipes, or create one from selected mail ("more like this").
 - Teach Jev from your corrections: right-click → JevIt → "This is …" / "This is not …". Shortcuts: Alt+Shift+S (spam), Alt+Shift+D (not spam).
 - See Jev's scores for the open email in the message-header popup, then correct and apply them.
-- Triage selected mail from the context menu, or automatically for new mail. Already triaged mail is skipped by default; mail whose triage failed is not.
+- Triage selected mail from the context menu, or automatically for new mail in the folders you choose. Already triaged mail is skipped by default; mail whose triage failed is not.
 - Progress on the toolbar button while triaging. Click the button to stop a long run. When a manual run is done, one notification sums up what each recipe matched.
 - A Triaged tag on every mail Jev has judged (optional), and tag colours for both light and dark themes.
 - Careful with uncertain mail: when triaging, star, mark read, junk and move only happen when Jev is at least 90% sure. Applying from the header popup, and teaching, always run the action you choose. Below 90%, and for near misses, mail gets an Unsure tag to review and teach Jev from.
@@ -34,7 +34,7 @@ A Thunderbird 128+ MailExtension (Manifest V2) in plain JavaScript: no build ste
 
 | File | Role |
 |---|---|
-| `jev.js` | Shared logic: recipe library, request building, Jev client, scoring, usage and budget, sender checks, tags |
+| `jev.js` | Shared logic: recipe library, request building, Jev client, scoring, usage and budget, sender checks, tags, automatic-triage folder scope |
 | `background.js` | Triage runs (4 mails in parallel), context menus, auto-triage of new mail, toolbar progress, update migration |
 | `options.*` | The JevIt manager: connection, budget, recipes, backup export and import |
 | `popup.*` | Jev's scores for the open email, to correct and apply |

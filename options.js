@@ -22,6 +22,9 @@ function read() {
   s.consent = $("#consent").checked;
   s.model = $("#model").value.trim() || DEFAULTS.model;
   s.autoTriage = $("#autoTriage").checked;
+  const scope = $(`input[name="autoTriageScope"]:checked`)?.value;
+  s.autoTriageScope = scope === "inbox" || scope === "folders" ? scope : "incoming";
+  s.autoTriageFolders = [...document.querySelectorAll("#autoTriageFolders input:checked")].map((c) => c.value);
   s.skipTriaged = $("#skipTriaged").checked;
   s.excludedAccounts = [...document.querySelectorAll("#excludedAccounts input:checked")].map((c) => c.value);
   s.triagedTag = $("#triagedTag").checked;
@@ -49,6 +52,13 @@ function render() {
   $("#model").value = s.model;
   showConnection();
   $("#autoTriage").checked = s.autoTriage;
+  const scope = s.autoTriageScope === "inbox" || s.autoTriageScope === "folders" ? s.autoTriageScope : "incoming";
+  $(`#autoTriageScope input[value="${scope}"]`).checked = true;
+  const picked = new Set(s.autoTriageFolders ?? []);
+  $("#autoTriageFolders").replaceChildren(...(folders.length
+    ? folders.map((f) => checkLabel(f.label, f.id, picked.has(f.id)))
+    : [Object.assign(document.createElement("p"), { className: "hint", textContent: "No folders that can hold mail." })]));
+  showScope();
   $("#skipTriaged").checked = s.skipTriaged;
   $("#excludedAccounts").replaceChildren(...Object.entries(accounts).map(([id, name]) => {
     const label = document.createElement("label");
@@ -363,6 +373,24 @@ $("#importFile").onchange = async (e) => {
     `Imported ${imported.length} recipe(s): ${imported.length - replaced} new, ${replaced} replaced. Click Save to keep them.`;
 };
 
+// Show Where only while automatic triage is on, and the folder list only for Selected folders.
+function showScope() {
+  const on = $("#autoTriage").checked;
+  $("#autoTriageScope").hidden = !on;
+  $("#autoTriageFolders").hidden = !(on && $(`#autoTriageScope input[value="folders"]`).checked);
+}
+$("#autoTriage").onchange = showScope;
+$("#autoTriageScope").onchange = showScope;
+
+function checkLabel(text, value, checked) {
+  const label = document.createElement("label");
+  label.className = "check";
+  label.innerHTML = `<input type="checkbox"> <span></span>`;
+  label.querySelector("span").textContent = text;
+  Object.assign(label.querySelector("input"), { value, checked });
+  return label;
+}
+
 const validFolder = (folder) =>
   folders.some((f) => f.id === folder) || (folder.startsWith(EVERY_ACCOUNT) && folder.length > EVERY_ACCOUNT.length);
 
@@ -378,6 +406,10 @@ async function save() {
   }
   if (!(s.actSure >= 0 && s.actSure <= 1) || !(s.unsureMargin >= 0 && s.unsureMargin <= 1)) {
     $("#status").textContent = "Fix “Act only when Jev is this sure” and the unsure margin: numbers from 0 to 1.";
+    return;
+  }
+  if (s.autoTriage && s.autoTriageScope === "folders" && !s.autoTriageFolders.length) {
+    $("#status").textContent = "Tick at least one folder under Where, or choose Inboxes and normal folders or Inbox only.";
     return;
   }
   const keys = s.recipes.map((r) => r.key);
@@ -414,7 +446,8 @@ $("#kofi").onclick = (e) => {
   messenger.windows.openDefaultBrowser(e.currentTarget.href);
 };
 
-// Move targets, and where new folders can go (account top levels first). Labels read "Account/path".
+// Move targets and the automatic-triage folder list (folders that can hold mail),
+// and where new folders can go (account top levels first). Labels read "Account/path".
 async function loadFolders() {
   accounts = Object.fromEntries((await messenger.accounts.list(false)).map((a) => [a.id, a.name]));
   const labelled = (list) => list
