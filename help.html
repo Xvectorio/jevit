@@ -177,8 +177,9 @@
         Thunderbird keeps what it has learned in <code>training.dat</code> in your profile folder. Keep that file in case you switch back.</p>
       <p>If you keep Thunderbird's filter on:</p>
       <ul>
-        <li><b>Untick “Move new junk messages to”</b>, unless Junk is one of the <b>Selected folders</b> under Where.
-          With <b>Inboxes and normal folders</b> or <b>Inbox only</b>, mail Thunderbird moves to Junk is never triaged, so Thunderbird's mistakes stay hidden there.</li>
+        <li><b>Untick “Move new junk messages to”.</b> JevIt looks at the folder new mail arrives in. Thunderbird's move to Junk comes after that and does not send the mail through again, even if Junk is ticked under <b>Where</b>.
+          With <b>Inboxes and normal folders</b> or <b>Inbox only</b>, that arrival is still triaged when JevIt can still read the message.
+          Mail Thunderbird reports as already in Junk is triaged only when Junk is one of the <b>Selected folders</b>.</li>
         <li><b>Expect two verdicts.</b> Thunderbird can mark an email as junk that JevIt doesn't tag as Spam.
           “This is not Spam” removes JevIt's tag but not Thunderbird's junk flag: click <b>Not Junk</b> for that.</li>
       </ul>
