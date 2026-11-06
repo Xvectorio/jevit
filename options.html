@@ -50,7 +50,14 @@
           <span class="hint">Default 3000. 0 sends none of the text; everything else listed above, such as links and attachment names, is still sent.</span>
         </label>
       </div>
-      <label class="check" title="Triage every new email in your inboxes and normal folders as it arrives. Mail that Thunderbird's junk filter moves to Junk meanwhile, usually a few seconds after it arrives, is left alone."><input type="checkbox" id="autoTriage"> Automatically run recipes on new mail</label>
+      <label class="check" title="Run recipes as new mail arrives, in the folders chosen below. Takes effect on the next mail after you Save. Mail you triage yourself is not limited by this. Mail that Thunderbird's junk filter moves away meanwhile, usually a few seconds after it arrives, is left alone."><input type="checkbox" id="autoTriage"> Automatically run recipes on new mail</label>
+      <fieldset id="autoTriageScope" class="scope" hidden>
+        <legend>Where</legend>
+        <label class="check" title="Thunderbird's usual new-mail folders: every Inbox, and ordinary folders such as ones a filter files into. Not Junk, Trash, Sent, Drafts, Templates, Archives or Outbox."><input type="radio" name="autoTriageScope" value="incoming" checked> Inboxes and normal folders</label>
+        <label class="check" title="Only each account's real Inbox. Mail a filter already moved into another folder is not triaged. Excluded accounts are still skipped."><input type="radio" name="autoTriageScope" value="inbox"> Inbox only</label>
+        <label class="check" title="Only the folders you tick, including Junk or Archives. Tick the account's own folder: a unified folder does not receive new mail. A folder you rename or move has to be ticked again."><input type="radio" name="autoTriageScope" value="folders"> Selected folders</label>
+        <div id="autoTriageFolders" class="folder-pick" hidden></div>
+      </fieldset>
       <label class="check" title="When you triage selected mail, emails that already have the Triaged tag are skipped, so you don't pay for them twice. Untick to apply your recipes to them again, for example after changing a threshold. Jev's earlier scores are reused for free; only recipes you edited or taught since are asked again."><input type="checkbox" id="skipTriaged"> Skip already triaged mail</label>
       <div class="grid2">
         <label title="Star, mark read, mark as junk and move only happen when Jev is at least this sure, from 0 to 1. Below it, a matching recipe only sets its tag, and the mail gets the Unsure tag so you can check it. A wrong tag is easy to spot; a wrong move to Junk hides the mail. Applying from the header popup, or teaching Jev, always runs the actions.">Act only when Jev is this sure

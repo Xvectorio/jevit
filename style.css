@@ -67,6 +67,14 @@ meter { width: 120px; }
 @media (max-width: 600px) { .grid2, .row { grid-template-columns: 1fr; } }
 
 .consent { border-left: 3px solid var(--warn); padding: 4px 0 4px 12px; margin-bottom: 16px; }
+.scope { border: 0; margin: -4px 0 4px 26px; padding: 0; min-inline-size: 0; }
+.scope legend { font-size: 12px; font-weight: 600; color: var(--muted); padding: 0; margin: 0 0 4px; }
+.scope label.check { margin-bottom: 6px; }
+.folder-pick {
+  max-height: 220px; overflow: auto; margin: 2px 0 12px; padding: 8px 10px;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--field);
+}
+.folder-pick .hint { margin: 0; }
 .consent p { margin: 0 0 8px; }
 .consent p.hint { margin: 0; }
 

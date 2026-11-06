@@ -42,7 +42,7 @@
         <li>Pick the <b>Service</b> that runs Jev: <b>TypeSafe</b> (the default), <b>OpenRouter</b>, or <b>Open-Jev on this computer</b>.</li>
         <li>Read who receives your mail and tick <b>“JevIt may send the content of emails I triage to …”</b>. Nothing is sent before you do.</li>
         <li>Paste your <b>API key</b> for that service (from typesafe.ai or openrouter.ai/keys; Open-Jev only needs one if your server asks). It is saved when you leave the field and never shown again. Paste a new one to replace it, or click <b>Remove key</b>.</li>
-        <li>Optional: tick <b>Automatically run recipes on new mail</b>, then click <b>Save</b>.</li>
+        <li>Optional: tick <b>Automatically run recipes on new mail</b>, choose <b>Where</b>, then click <b>Save</b>.</li>
         <li>Try it: open an email and click <b>JevIt</b> in the message header to see what Jev thinks.</li>
       </ol>
       <p>Five recipes are installed to start with: Spam, Needs reply, Newsletter, Invoice / receipt and Urgent. By default they only add a tag.</p>
@@ -56,8 +56,12 @@
       <h2>Triaging mail</h2>
       <dl>
         <dt>Automatically</dt>
-        <dd>With “Automatically run recipes on new mail” on, every new email in your inboxes and normal folders is triaged as it arrives.
-          Mail that moves away while JevIt works on it, such as to Junk by Thunderbird's junk filter a few seconds after it arrives, is left alone; that isn't an error.</dd>
+        <dd>With “Automatically run recipes on new mail” on, new mail is triaged as it arrives in the folders under <b>Where</b>.
+          <b>Inboxes and normal folders</b> (the default) is every Inbox and ordinary folders, including mail a filter has already filed into one. Junk, Trash, Sent, Drafts, Templates, Archives and Outbox are not included.
+          <b>Inbox only</b> is each account's Inbox: mail a filter moved somewhere else is left alone.
+          <b>Selected folders</b> is only the folders you tick, and can include Junk or Archives. Tick the account's own folder; a unified folder does not receive new mail. A folder you rename or move has to be ticked again.
+          Mail you triage from the context menu or the header is not limited by this. Accounts you exclude are still skipped.
+          Mail that moves away while JevIt works on it, such as to Junk a few seconds after it arrives, is left alone; that isn't an error.</dd>
         <dt>Selected mail</dt>
         <dd>Select one or more emails, right-click and choose <b>JevIt → Triage with Jev</b>. To triage a whole folder, press Ctrl+A first. Emails are handled four at a time, so large selections still take a while: the JevIt toolbar button counts the emails done, and clicking it stops the run, including the emails on their way to Jev at that moment: they're left as they were. When it's done, one notification sums up what each recipe matched, how many emails are Unsure, and anything skipped or failed.</dd>
         <dt>One email, with review</dt>
@@ -173,8 +177,9 @@
         Thunderbird keeps what it has learned in <code>training.dat</code> in your profile folder. Keep that file in case you switch back.</p>
       <p>If you keep Thunderbird's filter on:</p>
       <ul>
-        <li><b>Untick “Move new junk messages to”.</b> JevIt sees new mail only after Thunderbird's junk check, and only in inboxes and normal folders.
-          Mail that Thunderbird moves to Junk is never triaged, so Thunderbird's mistakes stay hidden there.</li>
+        <li><b>Untick “Move new junk messages to”.</b> JevIt looks at the folder new mail arrives in. Thunderbird's move to Junk comes after that and does not send the mail through again, even if Junk is ticked under <b>Where</b>.
+          With <b>Inboxes and normal folders</b> or <b>Inbox only</b>, that arrival is still triaged when JevIt can still read the message.
+          Mail Thunderbird reports as already in Junk is triaged only when Junk is one of the <b>Selected folders</b>.</li>
         <li><b>Expect two verdicts.</b> Thunderbird can mark an email as junk that JevIt doesn't tag as Spam.
           “This is not Spam” removes JevIt's tag but not Thunderbird's junk flag: click <b>Not Junk</b> for that.</li>
       </ul>

@@ -1,7 +1,7 @@
 // node test.js  (set TYPESAFE_API_KEY or OPENROUTER_API_KEY to also run the default recipes against Jev there)
 const assert = require("node:assert");
 const fs = require("node:fs"), vm = require("node:vm");
-const { onMessage, markRetry, scoresIn, JEV_API, OPENROUTER_API, localApi, serviceOf, receiver, connectionProblem, storeKey, keySaved, DEFAULTS, RECIPE_LIBRARY, cleanBody, linkHosts, hiddenStyle, stripHidden, updateRecipes, questionFor, questionsFor, reuse, remember, classify, judgedBefore, pruneScores, decide, certainty, dmarcPass, plan, addExample, exampleOf, mergeExamples, learn, saveSettings, draftRecipe, parseBackup, askJev, replyReason, haltRequests, countUsage, resolveFolder, applyRecipes, knownSender, emailState, authServId, trustedServer, addUsage, budgetLeft, monthName, money, syncTags, colorFor, activeScheme, PALETTE } = require("./jev.js");
+const { onMessage, markRetry, scoresIn, JEV_API, OPENROUTER_API, localApi, serviceOf, receiver, connectionProblem, storeKey, keySaved, DEFAULTS, RECIPE_LIBRARY, cleanBody, linkHosts, hiddenStyle, stripHidden, updateRecipes, questionFor, questionsFor, reuse, remember, classify, judgedBefore, pruneScores, decide, certainty, dmarcPass, plan, addExample, exampleOf, mergeExamples, learn, saveSettings, draftRecipe, parseBackup, askJev, replyReason, haltRequests, countUsage, resolveFolder, inAutoTriageScope, applyRecipes, knownSender, emailState, authServId, trustedServer, addUsage, budgetLeft, monthName, money, syncTags, colorFor, activeScheme, PALETTE } = require("./jev.js");
 
 assert.equal(cleanBody("Hi\n> old quote\n\n\n\n  Bye  "), "Hi\n\nBye");
 assert.equal(cleanBody("x".repeat(9000)).length, 3000);
@@ -192,6 +192,55 @@ assert.deepEqual([big.examples[0].from.length, big.examples[0].subject.length], 
 assert.throws(() => parseBackup('{"recipes":[{"key":"Bad Key","question":"Q?"}]}'), /Invalid recipe/);
 assert.throws(() => parseBackup("{}"), /No recipes/);
 assert.throws(() => parseBackup("not json"));
+
+// Automatic triage watches one event folder. "incoming" is Thunderbird's default listener.
+assert.equal(DEFAULTS.autoTriageScope, "incoming");
+assert.deepEqual(DEFAULTS.autoTriageFolders, []);
+const inbox = { id: "a:/Inbox", specialUse: ["inbox"] };
+const otherInbox = { id: "b:/Inbox", specialUse: ["inbox"] };
+const namedInbox = { id: "a:/Posteingang", specialUse: ["inbox"] };
+const inboxByName = { id: "a:/Inbox", specialUse: [] };
+const filed = { id: "a:/Clients", specialUse: [] };
+const allMail = { id: "a:/All Mail" };
+const virtual = { id: "a:/Search", specialUse: [], isVirtual: true };
+const virtualInbox = { id: "a:/Virtual Inbox", specialUse: ["inbox"], isVirtual: true };
+const junkFolder = { id: "a:/Junk", specialUse: ["junk"] };
+assert.equal(inAutoTriageScope(null, "incoming"), false);
+assert.equal(inAutoTriageScope(inbox, "incoming"), true);
+assert.equal(inAutoTriageScope(namedInbox, "incoming"), true);
+assert.equal(inAutoTriageScope(filed, "incoming"), true, "a filter's normal destination still arrives");
+assert.equal(inAutoTriageScope(allMail, "incoming"), true, "All Mail is normal: its flag is not special-use");
+assert.equal(inAutoTriageScope(inboxByName, "incoming"), true, "a folder named Inbox without the flag is still normal");
+assert.equal(inAutoTriageScope(virtual, "incoming"), false);
+assert.equal(inAutoTriageScope(virtualInbox, "incoming"), true, "an Inbox flag wins over virtual");
+assert.equal(inAutoTriageScope(inbox, "legacy"), true, "an unknown scope stays on today's behaviour");
+assert.equal(inAutoTriageScope(filed, "legacy"), true, "unknown scope is incoming, not inbox-only");
+assert.equal(inAutoTriageScope(allMail, "legacy"), true);
+assert.equal(inAutoTriageScope(virtual, "legacy"), false);
+assert.equal(inAutoTriageScope(junkFolder, "legacy"), false, "unknown scope does not match every folder");
+assert.equal(inAutoTriageScope(inbox, "inbox"), true);
+assert.equal(inAutoTriageScope(namedInbox, "inbox"), true, "Inbox scope is the flag, not the folder name");
+assert.equal(inAutoTriageScope(otherInbox, "inbox"), true, "each account's Inbox flag counts");
+assert.equal(inAutoTriageScope(inboxByName, "inbox"), false, "a folder named Inbox without the flag is not Inbox scope");
+assert.equal(inAutoTriageScope(filed, "inbox"), false, "filed mail is not Inbox");
+assert.equal(inAutoTriageScope(allMail, "inbox"), false);
+assert.equal(inAutoTriageScope(virtualInbox, "inbox"), true);
+for (const use of ["drafts", "trash", "sent", "templates", "junk", "archives", "outbox"]) {
+  const f = { id: `a:/${use}`, specialUse: [use] };
+  assert.equal(inAutoTriageScope(f, "incoming"), false, use);
+  assert.equal(inAutoTriageScope(f, "inbox"), false, use);
+  assert.equal(inAutoTriageScope(f, "folders", [f.id]), true, use);
+  assert.equal(inAutoTriageScope(f, "folders", ["a:/Inbox"]), false, use);
+}
+assert.equal(inAutoTriageScope(inbox, "folders", ["a:/Inbox", "b:/Inbox"]), true);
+assert.equal(inAutoTriageScope(otherInbox, "folders", ["a:/Inbox"]), false, "the other account's Inbox is a different id");
+assert.equal(inAutoTriageScope({ id: "a:/Inbox/Spam", specialUse: [] }, "folders", ["a:/Inbox"]), false, "a child path is not a prefix match");
+assert.equal(inAutoTriageScope({ id: "unified:/Inbox", specialUse: ["inbox"] }, "folders", ["a:/Inbox"]), false);
+assert.equal(inAutoTriageScope(filed, "folders", []), false);
+assert.equal(inAutoTriageScope(inbox, "folders", []), false, "an empty list is not every Inbox");
+assert.equal(inAutoTriageScope({ specialUse: ["junk"] }, "folders", ["a:/Junk"]), false, "an event without a folder id does not match");
+assert.equal(inAutoTriageScope({ id: "a:/Renamed", specialUse: ["junk"] }, "folders", ["a:/Junk"]), false, "a renamed folder's old id does not match");
+assert.equal(inAutoTriageScope(inbox, "folders", "a:/Inbox"), false, "ids must be a list");
 
 // Every-account folders: the mail's own account's folder by name (top-most wins), created there if missing.
 const store = [
