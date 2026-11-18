@@ -362,19 +362,23 @@ global.messenger = { folders: {
   await assert.rejects(emailState(1, 3000), /delivery-status/, "no MIME tree: the original error");
 
   // Hidden text and links: what inline styles or the hidden attribute hide isn't sent, the rest is.
-  for (const style of ["display:none", "DISPLAY: None !important", "visibility:hidden", "opacity:0", "opacity: 0.0",
+  for (const style of ["display:none", "DISPLAY: None !important", "opacity:0", "opacity: 0.0",
     "max-height:0; overflow:hidden", "height: 0 !important; overflow: hidden !important", "color:red; display:none; mso-hide:all"])
     assert.equal(hiddenStyle(style), true, style);
-  for (const style of [undefined, "", "font-size:0px", "display:block", "opacity:0.5", "font-size:10px", "max-height:0", "height:0; overflow:visible", "background:url(x;y)", "border:0"])
+  for (const style of [undefined, "", "font-size:0px", "visibility:hidden", "display:block", "opacity:0.5", "font-size:10px", "max-height:0", "height:0; overflow:visible", "background:url(x;y)", "border:0"])
     assert.equal(hiddenStyle(style), false, String(style));
   // DOMParser in miniature: elements with attributes and children, and the selectors JevIt uses ("a[href]", "[hidden], [style]", "style, script").
   const el = (tag, attrs = {}, ...kids) => {
     const text = (value) => ({ nodeType: 3, textContent: value, parent: null, remove() { this.parent.kids = this.parent.kids.filter((k) => k !== this); } });
     const e = { tag, tagName: tag.toUpperCase(), nodeType: 1, attrs, kids: kids.map((k) => typeof k === "string" ? text(k) : k), parent: null };
     Object.defineProperty(e, "childNodes", { get: () => e.kids });
-    // style.fontSize as the browser gives it: the last valid font-size declaration, "" for none or an invalid one.
-    Object.defineProperty(e, "style", { get: () => ({ fontSize: (attrs.style ?? "").split(";").map((d) => d.match(/^\s*font-size\s*:\s*(.*?)\s*(?:!\s*important\s*)?$/i)?.[1].toLowerCase())
-      .filter((v) => v && /^(?:0|\+?[\d.]+(?:px|pt|pc|in|cm|mm|q|rem|em|ex|ch|%)|[a-z-]+|(?:calc|min|max|clamp|var)\(.*\))$/.test(v)).pop() ?? "" }) });
+    // style as the browser gives it: the last valid declaration of a property, "" for none or an invalid one.
+    const declared = (name, valid) => (attrs.style ?? "").split(";").map((d) => d.match(new RegExp(`^\\s*${name}\\s*:\\s*(.*?)\\s*(?:!\\s*important\\s*)?$`, "i"))?.[1].toLowerCase())
+      .filter((v) => v && valid.test(v)).pop() ?? "";
+    Object.defineProperty(e, "style", { get: () => ({
+      fontSize: declared("font-size", /^(?:0|\+?[\d.]+(?:px|pt|pc|in|cm|mm|q|rem|em|ex|ch|%)|[a-z-]+|(?:calc|min|max|clamp|var)\(.*\))$/),
+      visibility: declared("visibility", /^(?:visible|hidden|collapse|inherit|initial|unset|revert|revert-layer)$/),
+    }) });
     e.kids.forEach((k) => (k.parent = e));
     e.getAttribute = (a) => attrs[a] ?? null;
     e.hasAttribute = (a) => Object.hasOwn(attrs, a);
@@ -398,9 +402,10 @@ global.messenger = { folders: {
     const [, tag, attr] = s.trim().match(/^(\w*)(?:\[(\w+)\])?$/);
     return (!tag || e.tag === tag) && (!attr || e.hasAttribute(attr));
   });
-  const dom = (body) => {
-    const root = el("html", {}, body);
-    return { get body() { return root.kids.find((k) => k.tag === "body") ?? null; }, querySelectorAll: (sel) => all({ kids: [root] }).filter((e) => matches(e, sel)) };
+  const dom = (body, rootAttrs = {}, compatMode = "CSS1Compat") => {
+    const root = el("html", rootAttrs, body);
+    return { documentElement: root, compatMode, get body() { return root.kids.find((k) => k.tag === "body") ?? null; },
+      querySelectorAll: (sel) => all({ kids: [root] }).filter((e) => matches(e, sel)) };
   };
   const comment = () => ({ nodeType: 8, textContent: "", remove() { this.parent.kids = this.parent.kids.filter((k) => k !== this); } });
   let html;
@@ -476,6 +481,28 @@ global.messenger = { folders: {
     return dom(el("body", {}, el("div", { style: "font-size:14px" }, e)));
   };
   assert.match((await emailState(1, 3000)).email.body, /Deep/);
+  // visibility:hidden hides text and pictures, not the elements in them: a child with visibility:visible shows again.
+  html = () => dom(el("body", {},
+    el("div", { style: "visibility:hidden" }, "Hidden. ", el("div", { style: "VISIBILITY: Visible !important" }, "Confirm your password at ",
+      el("a", { href: "https://evil.example" }, "evil.example"), el("span", { style: "visibility:hidden" }, " re-hidden"))),
+    el("div", { style: "visibility:hidden" }, el("p", {}, el("span", { style: "visibility:visible" }, "Two levels down. ")),
+      el("a", { href: "https://hidden.example" }, el("img", { src: "x" }))),
+    el("table", {}, el("tr", { style: "visibility:collapse" }, el("td", {}, "Collapsed row")), el("tr", { style: "visibility:collapse" }, el("td", { style: "visibility:visible" }, "Shown cell")))));
+  const visibility = (await emailState(1, 3000)).email;
+  assert.equal(visibility.body.replace(/\s+/g, " ").trim(), "Confirm your password at evil.example Two levels down. Shown cell");
+  assert.deepEqual(visibility.links, ["evil.example → evil.example"], "a hidden picture link goes; the re-shown one stays");
+  // A 0 size on <html> hides everything that doesn't set its own size, rem included; a size on <html> that isn't 0 doesn't.
+  html = () => dom(el("body", {}, "Hi Mom, dinner at 7. ", el("div", { style: "font-size:1rem" }, "Rem at 0. "),
+    el("div", { style: "font-size:16px" }, "Your account is locked")), { style: "font-size:0" });
+  assert.equal((await emailState(1, 3000)).email.body, "Your account is locked");
+  html = () => dom(el("body", {}, "Hi Mom. ", el("div", { style: "font-size:0" }, el("span", { style: "font-size:1rem" }, "Rem shown"))), { style: "font-size:20px" });
+  assert.equal((await emailState(1, 3000)).email.body, "Hi Mom. Rem shown");
+  // Without a doctype (quirks mode) a <table> starts again at the normal size; with one, it inherits the 0.
+  const quirksMail = () => el("body", {}, el("div", { style: "font-size:0" }, "Gap", el("table", {}, el("tr", {}, el("td", {}, "Your mailbox is full")))));
+  html = () => dom(quirksMail(), {}, "BackCompat");
+  assert.equal((await emailState(1, 3000)).email.body.trim(), "Your mailbox is full");
+  html = () => dom(quirksMail());
+  assert.equal((await emailState(1, 3000)).email.body.trim(), "");
   // A 0 height doesn't cut off <body> or <html>: their overflow goes to the window, so the reader still sees the mail.
   html = () => dom(el("body", { style: "max-height:0; overflow:hidden" }, el("p", {}, "Your account is locked")));
   assert.match((await emailState(1, 3000)).email.body, /Your account is locked/);
