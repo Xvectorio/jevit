@@ -362,28 +362,55 @@ global.messenger = { folders: {
   await assert.rejects(emailState(1, 3000), /delivery-status/, "no MIME tree: the original error");
 
   // Hidden text and links: what inline styles or the hidden attribute hide isn't sent, the rest is.
-  for (const style of ["display:none", "DISPLAY: None !important", "visibility:hidden", "opacity:0", "opacity: 0.0", "font-size:0px",
+  for (const style of ["display:none", "DISPLAY: None !important", "opacity:0", "opacity: 0.0",
     "max-height:0; overflow:hidden", "height: 0 !important; overflow: hidden !important", "color:red; display:none; mso-hide:all"])
     assert.equal(hiddenStyle(style), true, style);
-  for (const style of [undefined, "", "display:block", "opacity:0.5", "font-size:10px", "max-height:0", "height:0; overflow:visible", "background:url(x;y)", "border:0"])
+  assert.equal(hiddenStyle("visibility: Collapse", "TR"), true, "a collapsed row goes with its cells");
+  assert.equal(hiddenStyle("visibility:collapse", "DIV"), false, "collapse elsewhere is walked like hidden");
+  assert.equal(hiddenStyle("max-height:0; overflow:hidden", "BODY"), false, "a 0 height doesn't cut off <body>");
+  for (const style of [undefined, "", "font-size:0px", "visibility:hidden", "display:block", "opacity:0.5", "font-size:10px", "max-height:0", "height:0; overflow:visible", "background:url(x;y)", "border:0"])
     assert.equal(hiddenStyle(style), false, String(style));
   // DOMParser in miniature: elements with attributes and children, and the selectors JevIt uses ("a[href]", "[hidden], [style]", "style, script").
   const el = (tag, attrs = {}, ...kids) => {
-    const e = { tag, attrs, kids, parent: null };
-    kids.forEach((k) => typeof k === "object" && (k.parent = e));
+    const text = (value) => ({ nodeType: 3, textContent: value, parent: null, remove() { this.parent.kids = this.parent.kids.filter((k) => k !== this); } });
+    const e = { tag, tagName: tag.toUpperCase(), nodeType: 1, attrs, kids: kids.map((k) => typeof k === "string" ? text(k) : k), parent: null };
+    Object.defineProperty(e, "childNodes", { get: () => e.kids });
+    // style as the browser gives it: the last valid declaration of a property, "" for none or an invalid one.
+    const declared = (name, valid) => (attrs.style ?? "").split(";").map((d) => d.match(new RegExp(`^\\s*${name}\\s*:\\s*(.*?)\\s*(?:!\\s*important\\s*)?$`, "i"))?.[1].toLowerCase())
+      .filter((v) => v && valid.test(v)).pop() ?? "";
+    Object.defineProperty(e, "style", { get: () => ({
+      fontSize: declared("font-size", /^(?:0|\+?[\d.]+(?:px|pt|pc|in|cm|mm|q|rem|em|ex|ch|%)|[a-z-]+|(?:calc|min|max|clamp|var)\(.*\))$/),
+      visibility: declared("visibility", /^(?:visible|hidden|collapse|inherit|initial|unset|revert|revert-layer)$/),
+    }) });
+    e.kids.forEach((k) => (k.parent = e));
     e.getAttribute = (a) => attrs[a] ?? null;
     e.hasAttribute = (a) => Object.hasOwn(attrs, a);
     e.remove = () => e.parent && (e.parent.kids = e.parent.kids.filter((k) => k !== e));
-    e.after = (text) => e.parent && e.parent.kids.splice(e.parent.kids.indexOf(e) + 1, 0, text);
-    Object.defineProperty(e, "textContent", { get: () => e.kids.map((k) => (typeof k === "string" ? k : k.textContent)).join("") });
+    e.after = (value) => { if (e.parent) { const t = text(value); t.parent = e.parent; e.parent.kids.splice(e.parent.kids.indexOf(e) + 1, 0, t); } };
+    Object.defineProperty(e, "textContent", { get: () => walk(e).filter((k) => k.nodeType === 3).map((k) => k.textContent).join("") });
     return e;
   };
-  const all = (e) => e.kids.flatMap((k) => (typeof k === "string" ? [] : [k, ...all(k)]));
+  // Descendants in document order, without recursion: a test nests 100,000 deep.
+  const walk = (e) => {
+    const out = [];
+    for (const stack = [...e.kids].reverse(); stack.length;) {
+      const k = stack.pop();
+      out.push(k);
+      if (k.kids) stack.push(...[...k.kids].reverse());
+    }
+    return out;
+  };
+  const all = (e) => walk(e).filter((k) => k.nodeType === 1);
   const matches = (e, sel) => sel.split(",").some((s) => {
     const [, tag, attr] = s.trim().match(/^(\w*)(?:\[(\w+)\])?$/);
     return (!tag || e.tag === tag) && (!attr || e.hasAttribute(attr));
   });
-  const dom = (body) => ({ body, querySelectorAll: (sel) => all({ kids: [body] }).filter((e) => matches(e, sel)) });
+  const dom = (body, rootAttrs = {}, compatMode = "CSS1Compat") => {
+    const root = el("html", rootAttrs, body);
+    return { documentElement: root, compatMode, get body() { return root.kids.find((k) => k.tag === "body") ?? null; },
+      querySelectorAll: (sel) => all({ kids: [root] }).filter((e) => matches(e, sel)) };
+  };
+  const comment = () => ({ nodeType: 8, textContent: "", remove() { this.parent.kids = this.parent.kids.filter((k) => k !== this); } });
   let html;
   global.DOMParser = class { parseFromString() { return html(); } };
   messenger.messages.listAttachments = async () => [];
@@ -408,6 +435,85 @@ global.messenger = { folders: {
   html = () => dom(el("body", {}, el("div", { style: "display:none" }, ...Array.from({ length: 10 }, (_, i) => el("a", { href: `https://brand${i}.example` }, "x"))),
     el("a", { href: "https://evil.example" }, "Log in")));
   assert.deepEqual((await emailState(1, 3000)).email.links, ["Log in → evil.example"]);
+  // MJML-style layout: zero-size containers do not hide explicitly resized children.
+  html = () => dom(el("body", {}, el("table", { style: "font-size:0" },
+    "Invisible layout text", el("a", { href: "https://hidden.example" }, "Hidden link"),
+    el("td", { style: "font-size: 0px" }, el("div", { style: "font-size:16px" },
+      "Verification code: 123456 ", el("a", { href: "https://account.example/reset" }, "Reset password"))),
+    el("span", { style: "font-size:120%" }, "Still zero"),
+    el("span", { style: "font-size:1rem" }, "Visible again"))));
+  const restored = (await emailState(1, 3000)).email;
+  assert.match(restored.body, /Verification code: 123456/);
+  assert.match(restored.body, /Reset password/);
+  assert.match(restored.body, /Visible again/);
+  assert.ok(!/Invisible|Hidden link|Still zero/.test(restored.body));
+  assert.deepEqual(restored.links, ["Reset password → account.example"]);
+  // Zero-size text does not hide a linked image; inherited zero text stays hidden.
+  html = () => dom(el("body", { style: "font-size:0 !important" },
+    el("span", { style: "font-size:inherit" }, "Invisible"),
+    el("a", { href: "https://image.example" }, el("img", { src: "https://image.example/picture.png" })),
+    el("div", { style: "font-size:14px" }, "Visible content")));
+  const imageMail = (await emailState(1, 3000)).email;
+  assert.equal(imageMail.body, "Visible content");
+  assert.deepEqual(imageMail.links, ["→ image.example"]);
+  // Hidden links under a 0 size can't push the real one out either, whatever empty thing they hold.
+  html = () => dom(el("body", {}, el("div", { style: "font-size:0" }, ...Array.from({ length: 10 }, (_, i) => {
+    const a = el("a", { href: `https://brand${i}.example` }, [el("br"), comment(), el("input", { type: "hidden" }), el("span", { style: "font-size:16px" }, " ")][i % 4]);
+    a.kids.forEach((k) => (k.parent = a));
+    return a;
+  })), el("a", { href: "https://evil.example" }, "Log in")));
+  assert.deepEqual((await emailState(1, 3000)).email.links, ["Log in → evil.example"]);
+  // Under a 0, only a size of its own makes text visible: relative ones and rejected declarations stay 0.
+  html = () => dom(el("body", { style: "font-size:0" },
+    ...["calc(1em)", "revert", "+1em", "var(--z)", "16", "16px junk", "1em; font-size:0"].map((size) => el("span", { style: `font-size:${size}` }, `Hidden ${size}. `)),
+    ...["16px", "12pt", "1rem", "medium", "small; font-size:x-large !important"].map((size) => el("span", { style: `font-size:${size}` }, `Shown ${size}. `)),
+    el("font", { size: "3" }, "Font tag. "), el("font", { size: "3", style: "font-size:0" }, "Font tag at 0. ")));
+  const sizes = (await emailState(1, 3000)).email.body;
+  assert.equal(sizes, "Shown 16px. Shown 12pt. Shown 1rem. Shown medium. Shown small; font-size:x-large !important. Font tag.");
+  // A linked inline SVG icon keeps its link; its tag name is lowercase in an HTML document.
+  html = () => {
+    const svg = el("svg", {}, el("path", { d: "M0 0" }));
+    svg.tagName = "svg";
+    return dom(el("body", {}, el("td", { style: "font-size:0" }, el("a", { href: "https://shop.example" }, svg))));
+  };
+  assert.deepEqual((await emailState(1, 3000)).email.links, ["→ shop.example"]);
+  // Deep nesting can't overflow the stack.
+  html = () => {
+    let e = el("p", { style: "font-size:14px" }, "Deep");
+    for (let i = 0; i < 100000; i++) e = el("div", i % 2 ? {} : { style: "font-size:0" }, e, " ");
+    return dom(el("body", {}, el("div", { style: "font-size:14px" }, e)));
+  };
+  assert.match((await emailState(1, 3000)).email.body, /Deep/);
+  // visibility:hidden hides text and pictures, not the elements in them: a child with visibility:visible shows again.
+  html = () => dom(el("body", {},
+    el("div", { style: "visibility:hidden" }, "Hidden. ", el("div", { style: "VISIBILITY: Visible !important" }, "Confirm your password at ",
+      el("a", { href: "https://evil.example" }, "evil.example"), el("span", { style: "visibility:hidden" }, " re-hidden"))),
+    el("div", { style: "visibility:hidden" }, el("p", {}, el("span", { style: "visibility:visible" }, "Two levels down. ")),
+      el("a", { href: "https://hidden.example" }, el("img", { src: "x" }))),
+    el("table", {}, el("tr", {}, el("td", {}, "Row. ")), el("tr", { style: "visibility:collapse" }, el("td", {}, "Collapsed row")),
+      el("tr", { style: "visibility:collapse" }, el("td", { style: "visibility:visible" }, "Cell in a collapsed row"))),
+    el("div", { style: "visibility:collapse" }, el("span", { style: "visibility:visible" }, "Collapse outside a table is hidden"))));
+  const visibility = (await emailState(1, 3000)).email;
+  assert.equal(visibility.body.replace(/\s+/g, " ").trim(), "Confirm your password at evil.example Two levels down. Row. Collapse outside a table is hidden");
+  assert.deepEqual(visibility.links, ["evil.example → evil.example"], "a hidden picture link goes; the re-shown one stays");
+  // A 0 size on <html> hides everything that doesn't set its own size, rem included; a size on <html> that isn't 0 doesn't.
+  html = () => dom(el("body", {}, "Hi Mom, dinner at 7. ", el("div", { style: "font-size:1rem" }, "Rem at 0. "),
+    el("div", { style: "font-size:16px" }, "Your account is locked")), { style: "font-size:0" });
+  assert.equal((await emailState(1, 3000)).email.body, "Your account is locked");
+  html = () => dom(el("body", {}, "Hi Mom. ", el("div", { style: "font-size:0" }, el("span", { style: "font-size:1rem" }, "Rem shown"))), { style: "font-size:20px" });
+  assert.equal((await emailState(1, 3000)).email.body, "Hi Mom. Rem shown");
+  // A <table> inherits the 0 with or without a doctype: Thunderbird doesn't reset it in quirks mode.
+  const tableMail = () => el("body", {}, el("div", { style: "font-size:0" }, "Gap", el("table", {}, el("tr", {}, el("td", {}, "Your mailbox is full")))));
+  for (const compatMode of ["BackCompat", "CSS1Compat"]) {
+    html = () => dom(tableMail(), {}, compatMode);
+    assert.equal((await emailState(1, 3000)).email.body.trim(), "", compatMode);
+  }
+  // Form controls set their own font size: their text shows under a 0.
+  html = () => dom(el("body", { style: "font-size:0" }, el("button", {}, "Button"), el("select", {}, el("option", {}, " Select")), el("textarea", {}, " Textarea")));
+  assert.equal((await emailState(1, 3000)).email.body, "Button Select Textarea");
+  // A 0 height doesn't cut off <body> or <html>: their overflow goes to the window, so the reader still sees the mail.
+  html = () => dom(el("body", { style: "max-height:0; overflow:hidden" }, el("p", {}, "Your account is locked")));
+  assert.match((await emailState(1, 3000)).email.body, /Your account is locked/);
   delete global.DOMParser;
 
   // A cut through an emoji leaves half of it; that half goes to Jev as U+FFFD, never as a lone surrogate.
