@@ -569,37 +569,59 @@ function linkHosts(anchors) {
   }).slice(0, MAX_LINKS);
 }
 
-// Whether an inline style hides its whole subtree: display:none, visibility:hidden, opacity 0, or a height
-// of 0 with overflow hidden. "!important", spacing and case don't matter.
-function hiddenStyle(style = "") {
+// Whether an inline style hides its whole subtree: display:none, visibility:hidden, opacity 0, or a height of 0 with
+// overflow hidden. "!important", spacing and case don't matter. The height rule doesn't apply to <html> and <body>
+// (clips false): their overflow goes to the window, so they don't cut off what's in them.
+function hiddenStyle(style = "", clips = true) {
   const css = Object.fromEntries(style.split(";").map((d) => d.split(":").map((s) => s.replace(/!\s*important/i, "").trim().toLowerCase())));
   const zero = (v) => parseFloat(v) === 0;
   return css.display === "none" || css.visibility === "hidden" || zero(css.opacity) ||
-    ((zero(css.height) || zero(css["max-height"])) && css.overflow === "hidden");
+    (clips && (zero(css.height) || zero(css["max-height"])) && css.overflow === "hidden");
 }
 
-// Removes what the reader doesn't see, with everything inside it, so its text and links aren't sent and can't sway the
-// score. A guess from inline styles and the hidden attribute only: DOMParser lays nothing out, and <style> rules aren't read.
+// Elements that show something at any font size: pictures, embeds, rules and form controls. Their insides aren't walked.
+const showsAnySize = (e) => /^(?:img|svg|picture|video|canvas|object|embed|iframe|hr|input|select|textarea|button)$/i.test(e.tagName) &&
+  !(/^input$/i.test(e.tagName) && e.getAttribute("type")?.toLowerCase() === "hidden");
+
+// Whether an element's text is 0 high. Only sizes that don't depend on the parent's (16px, 12pt, 1rem, medium, and
+// <font size>) make text visible again under a 0; em, %, calc(), var(), revert and the like stay 0. The size comes
+// from style.fontSize, which is "" for none and for a declaration the browser rejected, as the reader's view would.
+function zeroFontSize(e, parentZero) {
+  const size = e.hasAttribute("style") ? e.style.fontSize : "";
+  if (!size) return e.tagName.toUpperCase() === "FONT" && e.hasAttribute("size") ? false : parentZero;
+  if (parseFloat(size) === 0) return true;
+  return parentZero && !/^(?:\+?[\d.]+(?:px|pt|pc|in|cm|mm|q|rem)|(?:xx?-|xxx-)?(?:small|large)|medium|initial)$/i.test(size);
+}
+
+// Removes what the reader doesn't see, so its text and links aren't sent and can't sway the score. A guess from inline
+// styles and the hidden attribute only: DOMParser lays nothing out, and <style> rules aren't read.
 function stripHidden(doc) {
-  doc.querySelectorAll("[hidden], [style]").forEach((e) => (e.hasAttribute("hidden") || hiddenStyle(e.getAttribute("style"))) && e.remove());
-  // Email layout tables often set font-size:0 to eliminate whitespace, then restore
-  // a readable size inside cells. Zero font size hides text, not the whole subtree.
-  // Walk inherited inline sizes, retaining descendants that restore a visible size.
-  const visit = (element, inheritedZero = false) => {
-    const style = element.getAttribute("style") ?? "";
-    const size = element.style?.fontSize || style.match(/(?:^|;)\s*font-size\s*:\s*([^;]+)/i)?.[1].replace(/!\s*important/i, "").trim().toLowerCase();
-    const relative = /^(?:[\d.]+(?:em|ex|ch|%)|smaller|larger)$/.test(size ?? "");
-    const zero = !size || /^(inherit|unset)$/.test(size) ? inheritedZero
-      : parseFloat(size) === 0 || (inheritedZero && relative);
-    for (const child of [...element.childNodes]) {
-      if (child.nodeType === 3 && zero) child.remove();
-      else if (child.nodeType === 1) visit(child, zero);
+  doc.querySelectorAll("[hidden], [style]").forEach((e) => (e.hasAttribute("hidden") ||
+    hiddenStyle(e.getAttribute("style"), !/^(?:html|body)$/i.test(e.tagName))) && e.remove());
+  if (!doc.body) return;
+  // Mail layouts often set font-size:0 to close the gaps between table cells, then a readable size inside them. So a
+  // 0 size hides text, not the elements in it: text under a 0 goes, and so does an element left with nothing to see,
+  // so empty hidden links can't push the real ones out of the MAX_LINKS. A loop, not recursion: deeply nested mail
+  // would overflow the stack. In walk order, children come after their parent, so backwards they come first.
+  const walk = [];
+  for (const stack = [[doc.body, false]]; stack.length;) {
+    const [e, parentZero] = stack.pop();
+    const zero = zeroFontSize(e, parentZero);
+    walk.push([e, zero]);
+    if (!showsAnySize(e)) for (const c of e.childNodes) if (c.nodeType === 1) stack.push([c, zero]);
+  }
+  const seen = new Set();
+  for (const [e, zero] of walk.reverse()) {
+    if (showsAnySize(e)) { seen.add(e); continue; }
+    let visible = false;
+    for (const c of [...e.childNodes]) {
+      if (c.nodeType === 1) visible ||= seen.has(c);
+      else if (zero) c.remove();
+      else visible ||= c.nodeType === 3 && c.textContent.trim() !== "";
     }
-    // Remove empty invisible links as well, so they cannot displace real links.
-    // Images and other non-text elements remain visible even with a zero font size.
-    if (element !== doc.body && zero && !element.childNodes.length && !/^(IMG|SVG|VIDEO|CANVAS|INPUT|BR|HR)$/.test(element.tagName)) element.remove();
-  };
-  if (doc.body) visit(doc.body);
+    if (visible) seen.add(e);
+    else if (zero && e !== doc.body) e.remove();
+  }
 }
 
 // Text of an HTML body: without CSS and scripts, which textContent would otherwise keep, and with a line break after
@@ -607,7 +629,7 @@ function stripHidden(doc) {
 function htmlText(doc) {
   doc.querySelectorAll("style, script, noscript, template").forEach((e) => e.remove());
   doc.querySelectorAll("br, p, div, li, tr, td, th, h1, h2, h3, h4, h5, h6, blockquote, table").forEach((e) => e.after("\n"));
-  return doc.body?.textContent ?? "";
+  return doc.body.textContent;
 }
 
 // Attachments in getFull()'s MIME tree, for when listAttachments() fails. Attachments have a name (maybe empty).

@@ -372,20 +372,37 @@ global.messenger = { folders: {
     const text = (value) => ({ nodeType: 3, textContent: value, parent: null, remove() { this.parent.kids = this.parent.kids.filter((k) => k !== this); } });
     const e = { tag, tagName: tag.toUpperCase(), nodeType: 1, attrs, kids: kids.map((k) => typeof k === "string" ? text(k) : k), parent: null };
     Object.defineProperty(e, "childNodes", { get: () => e.kids });
+    // style.fontSize as the browser gives it: the last valid font-size declaration, "" for none or an invalid one.
+    Object.defineProperty(e, "style", { get: () => ({ fontSize: (attrs.style ?? "").split(";").map((d) => d.match(/^\s*font-size\s*:\s*(.*?)\s*(?:!\s*important\s*)?$/i)?.[1].toLowerCase())
+      .filter((v) => v && /^(?:0|\+?[\d.]+(?:px|pt|pc|in|cm|mm|q|rem|em|ex|ch|%)|[a-z-]+|(?:calc|min|max|clamp|var)\(.*\))$/.test(v)).pop() ?? "" }) });
     e.kids.forEach((k) => (k.parent = e));
     e.getAttribute = (a) => attrs[a] ?? null;
     e.hasAttribute = (a) => Object.hasOwn(attrs, a);
     e.remove = () => e.parent && (e.parent.kids = e.parent.kids.filter((k) => k !== e));
     e.after = (value) => { if (e.parent) { const t = text(value); t.parent = e.parent; e.parent.kids.splice(e.parent.kids.indexOf(e) + 1, 0, t); } };
-    Object.defineProperty(e, "textContent", { get: () => e.kids.map((k) => (typeof k === "string" ? k : k.textContent)).join("") });
+    Object.defineProperty(e, "textContent", { get: () => walk(e).filter((k) => k.nodeType === 3).map((k) => k.textContent).join("") });
     return e;
   };
-  const all = (e) => e.kids.flatMap((k) => (k.nodeType !== 1 ? [] : [k, ...all(k)]));
+  // Descendants in document order, without recursion: a test nests 100,000 deep.
+  const walk = (e) => {
+    const out = [];
+    for (const stack = [...e.kids].reverse(); stack.length;) {
+      const k = stack.pop();
+      out.push(k);
+      if (k.kids) stack.push(...[...k.kids].reverse());
+    }
+    return out;
+  };
+  const all = (e) => walk(e).filter((k) => k.nodeType === 1);
   const matches = (e, sel) => sel.split(",").some((s) => {
     const [, tag, attr] = s.trim().match(/^(\w*)(?:\[(\w+)\])?$/);
     return (!tag || e.tag === tag) && (!attr || e.hasAttribute(attr));
   });
-  const dom = (body) => ({ body, querySelectorAll: (sel) => all({ kids: [body] }).filter((e) => matches(e, sel)) });
+  const dom = (body) => {
+    const root = el("html", {}, body);
+    return { get body() { return root.kids.find((k) => k.tag === "body") ?? null; }, querySelectorAll: (sel) => all({ kids: [root] }).filter((e) => matches(e, sel)) };
+  };
+  const comment = () => ({ nodeType: 8, textContent: "", remove() { this.parent.kids = this.parent.kids.filter((k) => k !== this); } });
   let html;
   global.DOMParser = class { parseFromString() { return html(); } };
   messenger.messages.listAttachments = async () => [];
@@ -431,8 +448,37 @@ global.messenger = { folders: {
   const imageMail = (await emailState(1, 3000)).email;
   assert.equal(imageMail.body, "Visible content");
   assert.deepEqual(imageMail.links, ["→ image.example"]);
-  html = () => ({ body: null, querySelectorAll: () => [] });
-  assert.equal((await emailState(1, 3000)).email.body, "", "a removed/absent body is empty, not an extraction error");
+  // Hidden links under a 0 size can't push the real one out either, whatever empty thing they hold.
+  html = () => dom(el("body", {}, el("div", { style: "font-size:0" }, ...Array.from({ length: 10 }, (_, i) => {
+    const a = el("a", { href: `https://brand${i}.example` }, [el("br"), comment(), el("input", { type: "hidden" }), el("span", { style: "font-size:16px" }, " ")][i % 4]);
+    a.kids.forEach((k) => (k.parent = a));
+    return a;
+  })), el("a", { href: "https://evil.example" }, "Log in")));
+  assert.deepEqual((await emailState(1, 3000)).email.links, ["Log in → evil.example"]);
+  // Under a 0, only a size of its own makes text visible: relative ones and rejected declarations stay 0.
+  html = () => dom(el("body", { style: "font-size:0" },
+    ...["calc(1em)", "revert", "+1em", "var(--z)", "16", "16px junk", "1em; font-size:0"].map((size) => el("span", { style: `font-size:${size}` }, `Hidden ${size}. `)),
+    ...["16px", "12pt", "1rem", "medium", "small; font-size:x-large !important"].map((size) => el("span", { style: `font-size:${size}` }, `Shown ${size}. `)),
+    el("font", { size: "3" }, "Font tag. "), el("font", { size: "3", style: "font-size:0" }, "Font tag at 0. ")));
+  const sizes = (await emailState(1, 3000)).email.body;
+  assert.equal(sizes, "Shown 16px. Shown 12pt. Shown 1rem. Shown medium. Shown small; font-size:x-large !important. Font tag.");
+  // A linked inline SVG icon keeps its link; its tag name is lowercase in an HTML document.
+  html = () => {
+    const svg = el("svg", {}, el("path", { d: "M0 0" }));
+    svg.tagName = "svg";
+    return dom(el("body", {}, el("td", { style: "font-size:0" }, el("a", { href: "https://shop.example" }, svg))));
+  };
+  assert.deepEqual((await emailState(1, 3000)).email.links, ["→ shop.example"]);
+  // Deep nesting can't overflow the stack.
+  html = () => {
+    let e = el("p", { style: "font-size:14px" }, "Deep");
+    for (let i = 0; i < 100000; i++) e = el("div", i % 2 ? {} : { style: "font-size:0" }, e, " ");
+    return dom(el("body", {}, el("div", { style: "font-size:14px" }, e)));
+  };
+  assert.match((await emailState(1, 3000)).email.body, /Deep/);
+  // A 0 height doesn't cut off <body> or <html>: their overflow goes to the window, so the reader still sees the mail.
+  html = () => dom(el("body", { style: "max-height:0; overflow:hidden" }, el("p", {}, "Your account is locked")));
+  assert.match((await emailState(1, 3000)).email.body, /Your account is locked/);
   delete global.DOMParser;
 
   // A cut through an emoji leaves half of it; that half goes to Jev as U+FFFD, never as a lone surrogate.
