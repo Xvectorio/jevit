@@ -569,14 +569,17 @@ function linkHosts(anchors) {
   }).slice(0, MAX_LINKS);
 }
 
-// Whether an inline style hides its whole subtree: display:none, opacity 0, or a height of 0 with overflow hidden.
-// "!important", spacing and case don't matter. visibility and font-size aren't here: a child can undo them, so
-// stripHidden walks them instead. The height rule doesn't apply to <html> and <body> (clips false): their overflow goes
-// to the window, so they don't cut off what's in them.
-function hiddenStyle(style = "", clips = true) {
+// Whether an element's inline style hides its whole subtree: display:none, opacity 0, a height of 0 with overflow
+// hidden, or visibility:collapse on a table row or row group, which Thunderbird drops along with its cells.
+// "!important", spacing and case don't matter. visibility elsewhere and font-size aren't here: a child can undo them,
+// so stripHidden walks them instead. The height rule doesn't apply to <html> and <body>: their overflow goes to the
+// window, so they don't cut off what's in them.
+function hiddenStyle(style = "", tag = "") {
   const css = Object.fromEntries(style.split(";").map((d) => d.split(":").map((s) => s.replace(/!\s*important/i, "").trim().toLowerCase())));
   const zero = (v) => parseFloat(v) === 0;
-  return css.display === "none" || zero(css.opacity) || (clips && (zero(css.height) || zero(css["max-height"])) && css.overflow === "hidden");
+  return css.display === "none" || zero(css.opacity) ||
+    (!/^(?:html|body)$/i.test(tag) && (zero(css.height) || zero(css["max-height"])) && css.overflow === "hidden") ||
+    (/^(?:tr|thead|tbody|tfoot)$/i.test(tag) && css.visibility === "collapse");
 }
 
 // Elements that show something at any font size: pictures, embeds, rules and form controls. Their insides aren't walked.
@@ -588,15 +591,14 @@ const showsAnySize = (e) => /^(?:img|svg|picture|video|canvas|object|embed|ifram
 // the browser rejected, as in the reader's view.
 // - Under a 0, only sizes that don't depend on the parent's (16px, 12pt, 1rem, medium, <font size>) make text visible
 //   again; em, %, calc(), var(), revert and the like stay 0. rem is 0 when <html> is (rootZero).
-// - In quirks mode (a mail without a doctype) a <table> starts again at the normal size, as Thunderbird shows it.
 // - visibility:hidden and collapse hide text and pictures, and visibility:visible shows them again below.
-function textState(e, parent, rootZero = false, quirks = false) {
+function textState(e, parent, rootZero = false) {
   const style = e.hasAttribute("style") ? e.style : null;
   const size = style?.fontSize ?? "";
   let zero = parent.zero;
   if (size) zero = parseFloat(size) === 0 || (rootZero && /rem$/i.test(size)) ||
     (parent.zero && !/^(?:\+?[\d.]+(?:px|pt|pc|in|cm|mm|q|rem)|(?:xx?-|xxx-)?(?:small|large)|medium|initial)$/i.test(size));
-  else if ((/^font$/i.test(e.tagName) && e.hasAttribute("size")) || (quirks && /^table$/i.test(e.tagName))) zero = false;
+  else if (/^font$/i.test(e.tagName) && e.hasAttribute("size")) zero = false;
   const visibility = style?.visibility ?? "";
   const hidden = /^(?:hidden|collapse)$/i.test(visibility) || (!/^(?:visible|initial)$/i.test(visibility) && parent.hidden);
   return { zero, hidden };
@@ -606,18 +608,17 @@ function textState(e, parent, rootZero = false, quirks = false) {
 // styles and the hidden attribute only: DOMParser lays nothing out, and <style> rules aren't read.
 function stripHidden(doc) {
   doc.querySelectorAll("[hidden], [style]").forEach((e) => (e.hasAttribute("hidden") ||
-    hiddenStyle(e.getAttribute("style"), !/^(?:html|body)$/i.test(e.tagName))) && e.remove());
+    hiddenStyle(e.getAttribute("style"), e.tagName)) && e.remove());
   if (!doc.body) return;
   // A 0 font size or visibility:hidden hides text, not the elements in it: mail layouts set font-size:0 to close the
   // gaps between table cells, then a readable size inside them. So hidden text goes, and so does a hidden element left
   // with nothing to see, so empty hidden links can't push the real ones out of the MAX_LINKS. A loop, not recursion:
   // deeply nested mail would overflow the stack. In walk order, children come after their parent, so backwards first.
   const root = doc.documentElement ? textState(doc.documentElement, { zero: false, hidden: false }) : { zero: false, hidden: false };
-  const quirks = doc.compatMode === "BackCompat";
   const walk = [];
   for (const stack = [[doc.body, root]]; stack.length;) {
     const [e, parent] = stack.pop();
-    const state = textState(e, parent, root.zero, quirks);
+    const state = textState(e, parent, root.zero);
     walk.push([e, state]);
     if (!showsAnySize(e)) for (const c of e.childNodes) if (c.nodeType === 1) stack.push([c, state]);
   }

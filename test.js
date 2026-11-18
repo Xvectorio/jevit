@@ -365,6 +365,9 @@ global.messenger = { folders: {
   for (const style of ["display:none", "DISPLAY: None !important", "opacity:0", "opacity: 0.0",
     "max-height:0; overflow:hidden", "height: 0 !important; overflow: hidden !important", "color:red; display:none; mso-hide:all"])
     assert.equal(hiddenStyle(style), true, style);
+  assert.equal(hiddenStyle("visibility: Collapse", "TR"), true, "a collapsed row goes with its cells");
+  assert.equal(hiddenStyle("visibility:collapse", "DIV"), false, "collapse elsewhere is walked like hidden");
+  assert.equal(hiddenStyle("max-height:0; overflow:hidden", "BODY"), false, "a 0 height doesn't cut off <body>");
   for (const style of [undefined, "", "font-size:0px", "visibility:hidden", "display:block", "opacity:0.5", "font-size:10px", "max-height:0", "height:0; overflow:visible", "background:url(x;y)", "border:0"])
     assert.equal(hiddenStyle(style), false, String(style));
   // DOMParser in miniature: elements with attributes and children, and the selectors JevIt uses ("a[href]", "[hidden], [style]", "style, script").
@@ -487,9 +490,11 @@ global.messenger = { folders: {
       el("a", { href: "https://evil.example" }, "evil.example"), el("span", { style: "visibility:hidden" }, " re-hidden"))),
     el("div", { style: "visibility:hidden" }, el("p", {}, el("span", { style: "visibility:visible" }, "Two levels down. ")),
       el("a", { href: "https://hidden.example" }, el("img", { src: "x" }))),
-    el("table", {}, el("tr", { style: "visibility:collapse" }, el("td", {}, "Collapsed row")), el("tr", { style: "visibility:collapse" }, el("td", { style: "visibility:visible" }, "Shown cell")))));
+    el("table", {}, el("tr", {}, el("td", {}, "Row. ")), el("tr", { style: "visibility:collapse" }, el("td", {}, "Collapsed row")),
+      el("tr", { style: "visibility:collapse" }, el("td", { style: "visibility:visible" }, "Cell in a collapsed row"))),
+    el("div", { style: "visibility:collapse" }, el("span", { style: "visibility:visible" }, "Collapse outside a table is hidden"))));
   const visibility = (await emailState(1, 3000)).email;
-  assert.equal(visibility.body.replace(/\s+/g, " ").trim(), "Confirm your password at evil.example Two levels down. Shown cell");
+  assert.equal(visibility.body.replace(/\s+/g, " ").trim(), "Confirm your password at evil.example Two levels down. Row. Collapse outside a table is hidden");
   assert.deepEqual(visibility.links, ["evil.example → evil.example"], "a hidden picture link goes; the re-shown one stays");
   // A 0 size on <html> hides everything that doesn't set its own size, rem included; a size on <html> that isn't 0 doesn't.
   html = () => dom(el("body", {}, "Hi Mom, dinner at 7. ", el("div", { style: "font-size:1rem" }, "Rem at 0. "),
@@ -497,12 +502,15 @@ global.messenger = { folders: {
   assert.equal((await emailState(1, 3000)).email.body, "Your account is locked");
   html = () => dom(el("body", {}, "Hi Mom. ", el("div", { style: "font-size:0" }, el("span", { style: "font-size:1rem" }, "Rem shown"))), { style: "font-size:20px" });
   assert.equal((await emailState(1, 3000)).email.body, "Hi Mom. Rem shown");
-  // Without a doctype (quirks mode) a <table> starts again at the normal size; with one, it inherits the 0.
-  const quirksMail = () => el("body", {}, el("div", { style: "font-size:0" }, "Gap", el("table", {}, el("tr", {}, el("td", {}, "Your mailbox is full")))));
-  html = () => dom(quirksMail(), {}, "BackCompat");
-  assert.equal((await emailState(1, 3000)).email.body.trim(), "Your mailbox is full");
-  html = () => dom(quirksMail());
-  assert.equal((await emailState(1, 3000)).email.body.trim(), "");
+  // A <table> inherits the 0 with or without a doctype: Thunderbird doesn't reset it in quirks mode.
+  const tableMail = () => el("body", {}, el("div", { style: "font-size:0" }, "Gap", el("table", {}, el("tr", {}, el("td", {}, "Your mailbox is full")))));
+  for (const compatMode of ["BackCompat", "CSS1Compat"]) {
+    html = () => dom(tableMail(), {}, compatMode);
+    assert.equal((await emailState(1, 3000)).email.body.trim(), "", compatMode);
+  }
+  // Form controls set their own font size: their text shows under a 0.
+  html = () => dom(el("body", { style: "font-size:0" }, el("button", {}, "Button"), el("select", {}, el("option", {}, " Select")), el("textarea", {}, " Textarea")));
+  assert.equal((await emailState(1, 3000)).email.body, "Button Select Textarea");
   // A 0 height doesn't cut off <body> or <html>: their overflow goes to the window, so the reader still sees the mail.
   html = () => dom(el("body", { style: "max-height:0; overflow:hidden" }, el("p", {}, "Your account is locked")));
   assert.match((await emailState(1, 3000)).email.body, /Your account is locked/);
