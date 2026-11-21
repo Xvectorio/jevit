@@ -25,7 +25,8 @@ function read() {
   const scope = $(`input[name="autoTriageScope"]:checked`)?.value;
   s.autoTriageScope = scope === "inbox" || scope === "folders" ? scope : "incoming";
   // Boxes that are not on the page (folder list not loaded, or that folder missing) do not count as unticked.
-  s.autoTriageFolders = keptFolderIds(s.autoTriageFolders, [...document.querySelectorAll("#autoTriageFolders input")].map((c) => ({ id: c.value, checked: c.checked })));
+  s.autoTriageFolders = keptFolderIds(s.autoTriageFolders, [...document.querySelectorAll("#autoTriageFolders input")].map((c) => ({ id: c.value, checked: c.checked })),
+    folders.map((f) => f.accountId));
   s.skipTriaged = $("#skipTriaged").checked;
   s.excludedAccounts = [...document.querySelectorAll("#excludedAccounts input:checked")].map((c) => c.value);
   s.triagedTag = $("#triagedTag").checked;

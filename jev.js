@@ -215,9 +215,13 @@ function inAutoTriageScope(folder, scope, ids) {
 }
 
 // Folder ids to store from the picker. A ticked box is kept, and an unticked box is not.
-// A saved id with no box on the page is kept too: that folder was not in the list (its
-// account was offline, or the folders had not loaded), and Save must not drop it.
-function keptFolderIds(saved, boxes) {
+// A saved id with no box on the page is kept only while its account has no folders listed
+// (accounts: the account ids on the page): the account was offline, or its folders hadn't
+// loaded, and Save must not drop it. When the account's folders are listed and this one
+// isn't, the folder was deleted or renamed, so it goes: otherwise a new folder at that
+// path would be watched without anyone ticking it. Folder ids are "accountId:/path".
+function keptFolderIds(saved, boxes, accounts = []) {
+  const loaded = new Set(accounts);
   const listed = new Set();
   const seen = new Set();
   const out = [];
@@ -231,7 +235,7 @@ function keptFolderIds(saved, boxes) {
     listed.add(box.id);
     if (box.checked) add(box.id);
   }
-  if (Array.isArray(saved)) for (const id of saved) if (!listed.has(id)) add(id);
+  if (Array.isArray(saved)) for (const id of saved) if (!listed.has(id) && !loaded.has(String(id).split(":/")[0])) add(id);
   return out;
 }
 

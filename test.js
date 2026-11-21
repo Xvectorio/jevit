@@ -246,6 +246,11 @@ assert.deepEqual(keptFolderIds(["a:/Offline"], [{ id: "a:/Inbox", checked: true 
 assert.deepEqual(keptFolderIds(["a:/Inbox"], [{ id: "a:/Inbox", checked: false }]), [], "unticking removes it");
 assert.deepEqual(keptFolderIds(["a:/Offline"], []), ["a:/Offline"], "an empty list has not loaded, so nothing is dropped");
 assert.deepEqual(keptFolderIds(null, [{ id: "a:/Inbox", checked: true }]), ["a:/Inbox"]);
+// A saved folder whose account is listed but which has no box was deleted or renamed: it goes, so a new folder at that
+// path isn't watched unticked. One whose account has nothing listed (offline, not loaded) stays.
+assert.deepEqual(keptFolderIds(["a:/Gone", "b:/Offline"], [{ id: "a:/Inbox", checked: true }], ["a"]), ["a:/Inbox", "b:/Offline"]);
+assert.deepEqual(keptFolderIds(["a:/Gone"], [{ id: "a:/Inbox", checked: false }], ["a"]), [], "a deleted folder doesn't keep the list non-empty");
+assert.deepEqual(keptFolderIds(["a:/x:/y"], [], ["a"]), [], "a path with :/ in it still belongs to its account");
 assert.deepEqual(
   keptFolderIds(["a:/Offline", "a:/Offline", 1, "a:/Inbox"], [{ id: "a:/Inbox", checked: true }, { id: "a:/Inbox", checked: true }, { checked: true }]),
   ["a:/Inbox", "a:/Offline"],
