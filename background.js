@@ -1,5 +1,5 @@
 // Clicking a JevIt notification opens the manager, where the key and consent are set.
-// Automatic triage runs on every new mail: show each kind of problem once per session, not each time.
+// Automatic triage runs on new mail in the saved folder scope: show each kind of problem once per session, not each time.
 // `reason` groups messages that differ only in details (counts, server replies).
 const notified = new Set();
 let shown = Promise.resolve(); // one notification call at a time, so they arrive in order
@@ -235,9 +235,14 @@ pruneDaily();
 // The manager takes a draft as soon as it opens; one left from an earlier session never will be, and holds mail text.
 messenger.storage.local.remove("draft").catch(console.error);
 
+// monitorAllFolders is fixed when the listener is added. Pass true so Save can start watching
+// Junk or another special folder immediately; inAutoTriageScope() is what actually decides,
+// and for "incoming" it reproduces Thunderbird's default (Inbox and normal folders only).
 messenger.messages.onNewMailReceived.addListener(async (folder, list) => {
-  if ((await loadSettings()).autoTriage) await triageList(list).catch((e) => (logError("Automatic triage", e), notify(`Jev triage failed: ${e.message}`, false)));
-});
+  const s = await loadSettings();
+  if (!s.autoTriage || !inAutoTriageScope(folder, s.autoTriageScope, s.autoTriageFolders)) return;
+  await triageList(list).catch((e) => (logError("Automatic triage", e), notify(`Jev triage failed: ${e.message}`, false)));
+}, true);
 
 messenger.runtime.onInstalled.addListener(async ({ reason }) => {
   if (reason === "install") return messenger.runtime.openOptionsPage();

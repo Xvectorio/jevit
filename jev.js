@@ -178,6 +178,11 @@ const DEFAULTS = {
   model: "jev-latest",
   endpoint: JEV_API, // OPENROUTER_API, or localApi(port). Other services' keys are kept in `apiKeys`, outside the settings
   autoTriage: false,
+  // Which new-mail folders automatic triage watches. "incoming" is Thunderbird's default
+  // listener (Inbox and normal folders). "inbox" is the Inbox flag only. "folders" is
+  // autoTriageFolders. Manual triage ignores this.
+  autoTriageScope: "incoming",
+  autoTriageFolders: [], // folder ids; used only when autoTriageScope is "folders"
   skipTriaged: true, // triaging selected mail skips mail Jev already judged: Triaged tag or stored scores
   triagedTag: true, // tag every judged mail Triaged. Thunderbird fills a selected row with its first tag's colour, so off keeps untouched mail looking as before
   excludedAccounts: [], // account ids whose mail is never sent to Jev
@@ -193,6 +198,46 @@ const DEFAULTS = {
   unsureName: UNSURE.name,
   recipes: RECIPE_LIBRARY.slice(0, 5),
 };
+
+// Whether one onNewMailReceived folder is inside the automatic-triage scope.
+// "incoming" matches Thunderbird's default listener (no monitorAllFolders): the Inbox
+// flag, or a normal folder — no special use and not virtual. All Mail counts as normal.
+// Junk, Trash, Sent, Drafts, Templates, Archives, Outbox and virtual search folders do not.
+// "inbox" is only the Inbox flag, including an Inbox that is also virtual.
+// "folders" is an exact folder id, so a renamed folder stops matching until it is picked again.
+// Any other scope, including a value saved before this setting, is treated as "incoming".
+function inAutoTriageScope(folder, scope, ids) {
+  if (!folder) return false;
+  const use = Array.isArray(folder.specialUse) ? folder.specialUse : [];
+  if (scope === "inbox") return use.includes("inbox");
+  if (scope === "folders") return typeof folder.id === "string" && Array.isArray(ids) && ids.includes(folder.id);
+  return use.includes("inbox") || (use.length === 0 && folder.isVirtual !== true);
+}
+
+// Folder ids to store from the picker. A ticked box is kept, and an unticked box is not.
+// A saved id with no box on the page is kept only while its account has no folders listed
+// (accounts: the account ids on the page): the account was offline, or its folders hadn't
+// loaded, and Save must not drop it. When the account's folders are listed and this one
+// isn't, the folder was deleted or renamed, so it goes: otherwise a new folder at that
+// path would be watched without anyone ticking it. Folder ids are "accountId:/path".
+function keptFolderIds(saved, boxes, accounts = []) {
+  const loaded = new Set(accounts);
+  const listed = new Set();
+  const seen = new Set();
+  const out = [];
+  const add = (id) => {
+    if (typeof id !== "string" || seen.has(id)) return;
+    seen.add(id);
+    out.push(id);
+  };
+  for (const box of boxes ?? []) {
+    if (typeof box?.id !== "string") continue;
+    listed.add(box.id);
+    if (box.checked) add(box.id);
+  }
+  if (Array.isArray(saved)) for (const id of saved) if (!listed.has(id) && !loaded.has(String(id).split(":/")[0])) add(id);
+  return out;
+}
 
 // Links written out in text, down to where they go: a web link keeps only its host (no user:password@, port, path,
 // query or #fragment), a mailto: link only its address. Punctuation ending the sentence stays.
@@ -938,5 +983,5 @@ async function* iterate(list) {
 }
 
 if (typeof module !== "undefined") {
-  module.exports = { onMessage, markRetry, scoresIn, JEV_API, OPENROUTER_API, localApi, serviceOf, receiver, connectionProblem, storeKey, keySaved, DEFAULTS, RECIPE_LIBRARY, cleanBody, linkHosts, hiddenStyle, stripHidden, updateRecipes, questionFor, questionsFor, reuse, remember, classify, judgedBefore, pruneScores, decide, certainty, dmarcPass, plan, addExample, exampleOf, mergeExamples, learn, saveSettings, draftRecipe, parseBackup, askJev, replyReason, haltRequests, countUsage, resolveFolder, applyRecipes, knownSender, emailState, authServId, trustedServer, addUsage, budgetLeft, monthName, money, syncTags, colorFor, activeScheme, PALETTE };
+  module.exports = { onMessage, markRetry, scoresIn, JEV_API, OPENROUTER_API, localApi, serviceOf, receiver, connectionProblem, storeKey, keySaved, DEFAULTS, RECIPE_LIBRARY, cleanBody, linkHosts, hiddenStyle, stripHidden, updateRecipes, questionFor, questionsFor, reuse, remember, classify, judgedBefore, pruneScores, decide, certainty, dmarcPass, plan, addExample, exampleOf, mergeExamples, learn, saveSettings, draftRecipe, parseBackup, askJev, replyReason, haltRequests, countUsage, resolveFolder, inAutoTriageScope, keptFolderIds, applyRecipes, knownSender, emailState, authServId, trustedServer, addUsage, budgetLeft, monthName, money, syncTags, colorFor, activeScheme, PALETTE };
 }

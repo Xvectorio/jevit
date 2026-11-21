@@ -22,6 +22,11 @@ function read() {
   s.consent = $("#consent").checked;
   s.model = $("#model").value.trim() || DEFAULTS.model;
   s.autoTriage = $("#autoTriage").checked;
+  const scope = $(`input[name="autoTriageScope"]:checked`)?.value;
+  s.autoTriageScope = scope === "inbox" || scope === "folders" ? scope : "incoming";
+  // Boxes that are not on the page (folder list not loaded, or that folder missing) do not count as unticked.
+  s.autoTriageFolders = keptFolderIds(s.autoTriageFolders, [...document.querySelectorAll("#autoTriageFolders input")].map((c) => ({ id: c.value, checked: c.checked })),
+    folders.map((f) => f.accountId));
   s.skipTriaged = $("#skipTriaged").checked;
   s.excludedAccounts = [...document.querySelectorAll("#excludedAccounts input:checked")].map((c) => c.value);
   s.triagedTag = $("#triagedTag").checked;
@@ -49,6 +54,10 @@ function render() {
   $("#model").value = s.model;
   showConnection();
   $("#autoTriage").checked = s.autoTriage;
+  const scope = s.autoTriageScope === "inbox" || s.autoTriageScope === "folders" ? s.autoTriageScope : "incoming";
+  $(`#autoTriageScope input[value="${scope}"]`).checked = true;
+  renderFolderPick();
+  showScope();
   $("#skipTriaged").checked = s.skipTriaged;
   $("#excludedAccounts").replaceChildren(...Object.entries(accounts).map(([id, name]) => {
     const label = document.createElement("label");
@@ -363,6 +372,53 @@ $("#importFile").onchange = async (e) => {
     `Imported ${imported.length} recipe(s): ${imported.length - replaced} new, ${replaced} replaced. Click Save to keep them.`;
 };
 
+// Show Where only while automatic triage is on, and the folder list only for Selected folders.
+function showScope() {
+  const on = $("#autoTriage").checked;
+  $("#autoTriageScope").hidden = !on;
+  $("#autoTriageFolders").hidden = !(on && $(`#autoTriageScope input[value="folders"]`).checked);
+}
+$("#autoTriage").onchange = showScope;
+$("#autoTriageScope").onchange = showScope;
+// Excluding an account marks its folders in the picker immediately. The boxes stay, so read() keeps a tick.
+$("#excludedAccounts").addEventListener("change", () => (read(), renderFolderPick()));
+
+function checkLabel(text, value, checked, title) {
+  const label = document.createElement("label");
+  label.className = "check";
+  if (title) label.title = title;
+  label.innerHTML = `<input type="checkbox"> <span></span>`;
+  label.querySelector("span").textContent = text;
+  Object.assign(label.querySelector("input"), { value, checked });
+  return label;
+}
+
+// Selected-folders list. A folder in an excluded account stays visible and ticked if it was,
+// and says why automatic triage will skip it.
+function renderFolderPick() {
+  const picked = new Set(s.autoTriageFolders ?? []);
+  const excluded = new Set(s.excludedAccounts ?? []);
+  const nodes = [];
+  if (folders.some((f) => excluded.has(f.accountId))) {
+    nodes.push(Object.assign(document.createElement("p"), {
+      className: "hint",
+      textContent: "Folders marked “excluded account” belong to an account set to never send mail to Jev. Automatic triage skips them, so ticking one does nothing.",
+    }));
+  }
+  nodes.push(...(folders.length
+    ? folders.map((f) => {
+        const skip = excluded.has(f.accountId);
+        return checkLabel(
+          skip ? `${f.label} (excluded account)` : f.label,
+          f.id,
+          picked.has(f.id),
+          skip ? "This account is set to never send mail to Jev. Automatic triage skips it, so ticking this folder does nothing." : undefined,
+        );
+      })
+    : [Object.assign(document.createElement("p"), { className: "hint", textContent: "No folders that can hold mail." })]));
+  $("#autoTriageFolders").replaceChildren(...nodes);
+}
+
 const validFolder = (folder) =>
   folders.some((f) => f.id === folder) || (folder.startsWith(EVERY_ACCOUNT) && folder.length > EVERY_ACCOUNT.length);
 
@@ -378,6 +434,10 @@ async function save() {
   }
   if (!(s.actSure >= 0 && s.actSure <= 1) || !(s.unsureMargin >= 0 && s.unsureMargin <= 1)) {
     $("#status").textContent = "Fix “Act only when Jev is this sure” and the unsure margin: numbers from 0 to 1.";
+    return;
+  }
+  if (s.autoTriage && s.autoTriageScope === "folders" && !s.autoTriageFolders.length) {
+    $("#status").textContent = "Tick at least one folder under Where, or choose Inboxes and normal folders or Inbox only.";
     return;
   }
   const keys = s.recipes.map((r) => r.key);
@@ -414,7 +474,8 @@ $("#kofi").onclick = (e) => {
   messenger.windows.openDefaultBrowser(e.currentTarget.href);
 };
 
-// Move targets, and where new folders can go (account top levels first). Labels read "Account/path".
+// Move targets and the automatic-triage folder list (folders that can hold mail),
+// and where new folders can go (account top levels first). Labels read "Account/path".
 async function loadFolders() {
   accounts = Object.fromEntries((await messenger.accounts.list(false)).map((a) => [a.id, a.name]));
   const labelled = (list) => list
