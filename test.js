@@ -1,7 +1,7 @@
 // node test.js  (set TYPESAFE_API_KEY or OPENROUTER_API_KEY to also run the default recipes against Jev there)
 const assert = require("node:assert");
 const fs = require("node:fs"), vm = require("node:vm");
-const { onMessage, markRetry, scoresIn, JEV_API, OPENROUTER_API, localApi, serviceOf, receiver, connectionProblem, storeKey, keySaved, DEFAULTS, RECIPE_LIBRARY, cleanBody, linkHosts, hiddenStyle, stripHidden, updateRecipes, questionFor, questionsFor, reuse, remember, classify, judgedBefore, pruneScores, decide, certainty, dmarcPass, plan, addExample, exampleOf, mergeExamples, learn, saveSettings, draftRecipe, parseBackup, askJev, replyReason, haltRequests, countUsage, resolveFolder, inAutoTriageScope, applyRecipes, knownSender, emailState, authServId, trustedServer, addUsage, budgetLeft, monthName, money, syncTags, colorFor, activeScheme, PALETTE } = require("./jev.js");
+const { onMessage, markRetry, scoresIn, JEV_API, OPENROUTER_API, localApi, serviceOf, receiver, connectionProblem, storeKey, keySaved, DEFAULTS, RECIPE_LIBRARY, cleanBody, linkHosts, hiddenStyle, stripHidden, updateRecipes, questionFor, questionsFor, reuse, remember, classify, judgedBefore, pruneScores, decide, certainty, dmarcPass, plan, addExample, exampleOf, mergeExamples, learn, saveSettings, draftRecipe, parseBackup, askJev, replyReason, haltRequests, countUsage, resolveFolder, inAutoTriageScope, keptFolderIds, applyRecipes, knownSender, emailState, authServId, trustedServer, addUsage, budgetLeft, monthName, money, syncTags, colorFor, activeScheme, PALETTE } = require("./jev.js");
 
 assert.equal(cleanBody("Hi\n> old quote\n\n\n\n  Bye  "), "Hi\n\nBye");
 assert.equal(cleanBody("x".repeat(9000)).length, 3000);
@@ -241,6 +241,15 @@ assert.equal(inAutoTriageScope(inbox, "folders", []), false, "an empty list is n
 assert.equal(inAutoTriageScope({ specialUse: ["junk"] }, "folders", ["a:/Junk"]), false, "an event without a folder id does not match");
 assert.equal(inAutoTriageScope({ id: "a:/Renamed", specialUse: ["junk"] }, "folders", ["a:/Junk"]), false, "a renamed folder's old id does not match");
 assert.equal(inAutoTriageScope(inbox, "folders", "a:/Inbox"), false, "ids must be a list");
+// A Save reads the boxes on the page. An id with no box stays; an unticked box does not.
+assert.deepEqual(keptFolderIds(["a:/Offline"], [{ id: "a:/Inbox", checked: true }]), ["a:/Inbox", "a:/Offline"]);
+assert.deepEqual(keptFolderIds(["a:/Inbox"], [{ id: "a:/Inbox", checked: false }]), [], "unticking removes it");
+assert.deepEqual(keptFolderIds(["a:/Offline"], []), ["a:/Offline"], "an empty list has not loaded, so nothing is dropped");
+assert.deepEqual(keptFolderIds(null, [{ id: "a:/Inbox", checked: true }]), ["a:/Inbox"]);
+assert.deepEqual(
+  keptFolderIds(["a:/Offline", "a:/Offline", 1, "a:/Inbox"], [{ id: "a:/Inbox", checked: true }, { id: "a:/Inbox", checked: true }, { checked: true }]),
+  ["a:/Inbox", "a:/Offline"],
+);
 
 // Every-account folders: the mail's own account's folder by name (top-most wins), created there if missing.
 const store = [

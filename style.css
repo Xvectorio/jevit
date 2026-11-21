@@ -74,7 +74,8 @@ meter { width: 120px; }
   max-height: 220px; overflow: auto; margin: 2px 0 12px; padding: 8px 10px;
   border: 1px solid var(--border); border-radius: 8px; background: var(--field);
 }
-.folder-pick .hint { margin: 0; }
+.folder-pick .hint { margin: 0 0 8px; }
+.folder-pick .hint:last-child { margin: 0; }
 .consent p { margin: 0 0 8px; }
 .consent p.hint { margin: 0; }
 

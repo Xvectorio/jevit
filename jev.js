@@ -214,6 +214,27 @@ function inAutoTriageScope(folder, scope, ids) {
   return use.includes("inbox") || (use.length === 0 && folder.isVirtual !== true);
 }
 
+// Folder ids to store from the picker. A ticked box is kept, and an unticked box is not.
+// A saved id with no box on the page is kept too: that folder was not in the list (its
+// account was offline, or the folders had not loaded), and Save must not drop it.
+function keptFolderIds(saved, boxes) {
+  const listed = new Set();
+  const seen = new Set();
+  const out = [];
+  const add = (id) => {
+    if (typeof id !== "string" || seen.has(id)) return;
+    seen.add(id);
+    out.push(id);
+  };
+  for (const box of boxes ?? []) {
+    if (typeof box?.id !== "string") continue;
+    listed.add(box.id);
+    if (box.checked) add(box.id);
+  }
+  if (Array.isArray(saved)) for (const id of saved) if (!listed.has(id)) add(id);
+  return out;
+}
+
 // Links written out in text, down to where they go: a web link keeps only its host (no user:password@, port, path,
 // query or #fragment), a mailto: link only its address. Punctuation ending the sentence stays.
 // A link the URL parser rejects still loses everything around its host-like part, never kept as written.
@@ -906,5 +927,5 @@ async function* iterate(list) {
 }
 
 if (typeof module !== "undefined") {
-  module.exports = { onMessage, markRetry, scoresIn, JEV_API, OPENROUTER_API, localApi, serviceOf, receiver, connectionProblem, storeKey, keySaved, DEFAULTS, RECIPE_LIBRARY, cleanBody, linkHosts, hiddenStyle, stripHidden, updateRecipes, questionFor, questionsFor, reuse, remember, classify, judgedBefore, pruneScores, decide, certainty, dmarcPass, plan, addExample, exampleOf, mergeExamples, learn, saveSettings, draftRecipe, parseBackup, askJev, replyReason, haltRequests, countUsage, resolveFolder, inAutoTriageScope, applyRecipes, knownSender, emailState, authServId, trustedServer, addUsage, budgetLeft, monthName, money, syncTags, colorFor, activeScheme, PALETTE };
+  module.exports = { onMessage, markRetry, scoresIn, JEV_API, OPENROUTER_API, localApi, serviceOf, receiver, connectionProblem, storeKey, keySaved, DEFAULTS, RECIPE_LIBRARY, cleanBody, linkHosts, hiddenStyle, stripHidden, updateRecipes, questionFor, questionsFor, reuse, remember, classify, judgedBefore, pruneScores, decide, certainty, dmarcPass, plan, addExample, exampleOf, mergeExamples, learn, saveSettings, draftRecipe, parseBackup, askJev, replyReason, haltRequests, countUsage, resolveFolder, inAutoTriageScope, keptFolderIds, applyRecipes, knownSender, emailState, authServId, trustedServer, addUsage, budgetLeft, monthName, money, syncTags, colorFor, activeScheme, PALETTE };
 }

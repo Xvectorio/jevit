@@ -24,7 +24,8 @@ function read() {
   s.autoTriage = $("#autoTriage").checked;
   const scope = $(`input[name="autoTriageScope"]:checked`)?.value;
   s.autoTriageScope = scope === "inbox" || scope === "folders" ? scope : "incoming";
-  s.autoTriageFolders = [...document.querySelectorAll("#autoTriageFolders input:checked")].map((c) => c.value);
+  // Boxes that are not on the page (folder list not loaded, or that folder missing) do not count as unticked.
+  s.autoTriageFolders = keptFolderIds(s.autoTriageFolders, [...document.querySelectorAll("#autoTriageFolders input")].map((c) => ({ id: c.value, checked: c.checked })));
   s.skipTriaged = $("#skipTriaged").checked;
   s.excludedAccounts = [...document.querySelectorAll("#excludedAccounts input:checked")].map((c) => c.value);
   s.triagedTag = $("#triagedTag").checked;
@@ -54,10 +55,7 @@ function render() {
   $("#autoTriage").checked = s.autoTriage;
   const scope = s.autoTriageScope === "inbox" || s.autoTriageScope === "folders" ? s.autoTriageScope : "incoming";
   $(`#autoTriageScope input[value="${scope}"]`).checked = true;
-  const picked = new Set(s.autoTriageFolders ?? []);
-  $("#autoTriageFolders").replaceChildren(...(folders.length
-    ? folders.map((f) => checkLabel(f.label, f.id, picked.has(f.id)))
-    : [Object.assign(document.createElement("p"), { className: "hint", textContent: "No folders that can hold mail." })]));
+  renderFolderPick();
   showScope();
   $("#skipTriaged").checked = s.skipTriaged;
   $("#excludedAccounts").replaceChildren(...Object.entries(accounts).map(([id, name]) => {
@@ -381,14 +379,43 @@ function showScope() {
 }
 $("#autoTriage").onchange = showScope;
 $("#autoTriageScope").onchange = showScope;
+// Excluding an account marks its folders in the picker immediately. The boxes stay, so read() keeps a tick.
+$("#excludedAccounts").addEventListener("change", () => (read(), renderFolderPick()));
 
-function checkLabel(text, value, checked) {
+function checkLabel(text, value, checked, title) {
   const label = document.createElement("label");
   label.className = "check";
+  if (title) label.title = title;
   label.innerHTML = `<input type="checkbox"> <span></span>`;
   label.querySelector("span").textContent = text;
   Object.assign(label.querySelector("input"), { value, checked });
   return label;
+}
+
+// Selected-folders list. A folder in an excluded account stays visible and ticked if it was,
+// and says why automatic triage will skip it.
+function renderFolderPick() {
+  const picked = new Set(s.autoTriageFolders ?? []);
+  const excluded = new Set(s.excludedAccounts ?? []);
+  const nodes = [];
+  if (folders.some((f) => excluded.has(f.accountId))) {
+    nodes.push(Object.assign(document.createElement("p"), {
+      className: "hint",
+      textContent: "Folders marked “excluded account” belong to an account set to never send mail to Jev. Automatic triage skips them, so ticking one does nothing.",
+    }));
+  }
+  nodes.push(...(folders.length
+    ? folders.map((f) => {
+        const skip = excluded.has(f.accountId);
+        return checkLabel(
+          skip ? `${f.label} (excluded account)` : f.label,
+          f.id,
+          picked.has(f.id),
+          skip ? "This account is set to never send mail to Jev. Automatic triage skips it, so ticking this folder does nothing." : undefined,
+        );
+      })
+    : [Object.assign(document.createElement("p"), { className: "hint", textContent: "No folders that can hold mail." })]));
+  $("#autoTriageFolders").replaceChildren(...nodes);
 }
 
 const validFolder = (folder) =>
